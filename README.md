@@ -17,8 +17,10 @@ Scanners that aren't installed are silently skipped with a degraded-mode warning
 
 ## Install
 
+Add the marketplace and install:
 ```bash
-claude plugin add seatbelt
+claude plugin marketplace add chris-yyau/seatbelt
+claude plugin install seatbelt@seatbelt
 ```
 
 Then install the scanner binaries you want:
