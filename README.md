@@ -1,6 +1,6 @@
 # Seatbelt
 
-Zero-config security scanning for vibe coders. Seatbelt is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) that runs security scanners automatically before every `git commit`.
+Zero-config security scanning for vibe coders. Seatbelt is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) that automatically scans your staged changes before every `git commit`.
 
 ## What it does
 
@@ -13,11 +13,18 @@ Seatbelt intercepts `git commit` commands and runs four security scanners on you
 | **trivy** | Dependency CVEs in lock files (HIGH/CRITICAL severity) | warn — findings shown, commit allowed |
 | **zizmor** | GitHub Actions workflow security issues (injection, unpinned actions) | warn — findings shown, commit allowed |
 
-Scanners that aren't installed are silently skipped with a degraded-mode warning. Install what you need — Seatbelt works with any combination.
+You don't need all four installed. Scanners that aren't found are skipped with a warning like:
+
+```
+SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)
+```
+
+Install any combination you want — Seatbelt works with one scanner or all four.
 
 ## Install
 
-Add the marketplace and install:
+Add the marketplace and install the plugin:
+
 ```bash
 claude plugin marketplace add chris-yyau/seatbelt
 claude plugin install seatbelt@seatbelt
@@ -27,27 +34,28 @@ Then install the scanner binaries you want:
 
 ```bash
 # macOS (recommended: install all four)
-brew install gitleaks checkov trivy
-pip3 install zizmor
-
-# Linux
 brew install gitleaks trivy
 pip3 install checkov zizmor
 
+# Linux
+pip3 install checkov zizmor
+# gitleaks: https://github.com/gitleaks/gitleaks/releases
+# trivy: https://github.com/aquasecurity/trivy/releases
+
 # Check what's installed
-/seatbelt doctor
+/seatbelt:doctor
 ```
 
 ## How it works
 
-Each scanner runs as a [PreToolUse hook](https://docs.anthropic.com/en/docs/claude-code/hooks) that fires before every Bash tool invocation. The hooks:
+Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) that fire before every Bash command Claude runs. When a `git commit` is detected:
 
-1. Read the tool invocation JSON from stdin
-2. Check if the command contains `git commit`
-3. If yes, run the relevant scanner on staged files
-4. Emit `{"decision":"block"}` (gitleaks/checkov) or print warnings (trivy/zizmor)
+- **gitleaks** runs `gitleaks protect --staged` on all staged changes
+- **checkov** scans staged IaC files (Dockerfiles, Terraform, k8s manifests, etc.)
+- **trivy** scans staged lock files (package-lock.json, Cargo.lock, go.sum, etc.) for known CVEs
+- **zizmor** scans staged GitHub Actions workflow files
 
-Non-commit commands (npm install, git push, grep, etc.) pass through instantly — the fast pre-filter adds negligible overhead.
+Non-commit commands pass through instantly with no overhead.
 
 ## Skip / bypass
 
@@ -70,16 +78,16 @@ Suppress specific findings:
 
 ## Commands
 
-### `/seatbelt doctor`
+### `/seatbelt:doctor`
 
 Checks which scanners are installed, reports versions, and provides platform-specific install instructions for anything missing.
 
 ## Requirements
 
-- **bash** 3.2+ (macOS default is fine)
+- **bash** 3.2+
 - **python3** (for JSON parsing in hook scripts)
-- **git** (obviously)
-- Scanner binaries: install any combination of gitleaks, checkov, trivy, zizmor
+- **git**
+- Scanner binaries: any combination of gitleaks, checkov, trivy, zizmor
 
 ## Supported file types
 
@@ -89,6 +97,13 @@ Checks which scanners are installed, reports versions, and provides platform-spe
 | checkov | Dockerfile, *.tf, docker-compose.yml, .github/workflows/*.yml, k8s/*.yml, helm/*.yml |
 | trivy | package-lock.json, yarn.lock, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, Pipfile.lock, go.sum, Gemfile.lock, composer.lock |
 | zizmor | .github/workflows/*.yml, .github/workflows/*.yaml |
+
+## Uninstall
+
+```bash
+claude plugin uninstall seatbelt@seatbelt
+claude plugin marketplace remove seatbelt
+```
 
 ## License
 
