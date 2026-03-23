@@ -6,6 +6,6 @@
     "name": "seatbelt contributors"
   },
   "license": "MIT",
-  "repository": "https://github.com/seatbelt-dev/seatbelt",
+  "repository": "https://github.com/chris-yyau/seatbelt",
   "keywords": ["security", "scanning", "hooks", "gitleaks", "checkov", "trivy", "zizmor", "vibe-coding"]
 }
