@@ -48,14 +48,14 @@ pip3 install checkov zizmor
 
 ## How it works
 
-Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) that fire before every Bash command Claude runs. When a `git commit` is detected:
+Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) on the Bash tool. Each hook receives the command as JSON, checks if it contains `git commit` via a fast string pre-filter, and exits immediately if not — so non-commit commands have near-zero overhead.
 
-- **gitleaks** runs `gitleaks protect --staged` on all staged changes
-- **checkov** scans staged IaC files (Dockerfiles, Terraform, k8s manifests, etc.)
-- **trivy** scans staged lock files (package-lock.json, Cargo.lock, go.sum, etc.) for known CVEs
-- **zizmor** scans staged GitHub Actions workflow files
+When a `git commit` is detected:
 
-Non-commit commands pass through instantly with no overhead.
+- **gitleaks** runs `gitleaks protect --staged` on the staged diff
+- **checkov** scans staged IaC files by name (Dockerfiles, Terraform, k8s manifests, etc.) using the working tree copy
+- **trivy** scans lock files (package-lock.json, Cargo.lock, go.sum, etc.) present in the staged file list for known CVEs, using the on-disk copy
+- **zizmor** scans GitHub Actions workflow files present in the staged file list
 
 ## Skip / bypass
 
