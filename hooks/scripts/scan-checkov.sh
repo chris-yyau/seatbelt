@@ -83,16 +83,21 @@ if [ -z "$CHECKOV_CMD" ]; then
     exit 0
 fi
 
-# ── Collect staged IaC files ────────────────────────────────────────
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
-[ -z "$STAGED_FILES" ] && exit 0
+# ── Extract staged IaC files to temp dir ──────────────────────────
+# Each staged file is extracted individually via `git show ":path"`.
+# Known limitation: multi-file IaC configs (e.g. Terraform modules with
+# relative `source` paths) that span multiple staged files may produce
+# parse errors in checkov because neighbour files are absent from SCAN_DIR.
+# Those files are skipped (fail-open) with a SEATBELT warning on stderr.
+SCAN_DIR=$(mktemp -d)
+trap 'rm -rf "$SCAN_DIR"' EXIT
 
 BLOCKED=0
 BLOCK_DETAILS=""
-
-while IFS= read -r staged_file; do
+EXTRACTED=0
+EXPECTED=0
+while IFS= read -r -d '' staged_file; do
     [ -z "$staged_file" ] && continue
-    [ -f "$staged_file" ] || continue
 
     FRAMEWORK=""
     case "$staged_file" in
@@ -105,7 +110,16 @@ while IFS= read -r staged_file; do
         *)                                                      continue ;;
     esac
 
-    OUTPUT=$($CHECKOV_CMD --file "$staged_file" --framework "$FRAMEWORK" --compact --quiet 2>&1) || true
+    # Skip symlinks (mode 120000) and submodules (mode 160000)
+    local_mode=$(git ls-files -s -- "$staged_file" 2>/dev/null | cut -d' ' -f1)
+    [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ] && continue
+
+    EXPECTED=$((EXPECTED + 1))
+    mkdir -p "$SCAN_DIR/$(dirname "$staged_file")" 2>/dev/null || continue
+    git show ":$staged_file" > "$SCAN_DIR/$staged_file" 2>/dev/null || continue
+    EXTRACTED=$((EXTRACTED + 1))
+
+    OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --compact --quiet 2>&1) || true
     FAILED=$(echo "$OUTPUT" | grep -c "FAILED" 2>/dev/null || true)
     FAILED=${FAILED:-0}
     PARSE_ERRORS=$(echo "$OUTPUT" | grep -cE "Parsing errors:" 2>/dev/null || true)
@@ -117,7 +131,13 @@ while IFS= read -r staged_file; do
     elif [ "$PARSE_ERRORS" -gt 0 ]; then
         echo "SEATBELT: checkov parse error in $(basename "$staged_file") — skipping" >&2
     fi
-done <<< "$STAGED_FILES"
+done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
+
+[ "$EXPECTED" -eq 0 ] && exit 0
+
+if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
+    echo "SEATBELT: checkov: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
 
 # ── Emit results ────────────────────────────────────────────────────
 if [ "$BLOCKED" = "1" ]; then

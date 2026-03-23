@@ -33,10 +33,12 @@ make_stub_scanner() {
 #!/usr/bin/env bash
 # Stub scanner — records file path + content to $0.log
 echo "STUB_CALLED: $*" >> "$0.log"
+prev=""
 for arg in "$@"; do
-    if [ -f "$arg" ]; then
+    if [ "$prev" = "--file" ] && [ -f "$arg" ]; then
         echo "STUB_CONTENT: $(cat "$arg")" >> "$0.log"
     fi
+    prev="$arg"
 done
 exit 0
 STUBEOF
@@ -96,3 +98,43 @@ run_zero_match_test() {
     rm -rf "$repo"
 }
 run_zero_match_test
+
+# ── Test: checkov scans staged content, not working tree ──────────
+run_checkov_staged_test() {
+    local repo
+    repo=$(make_test_repo)
+
+    # Stage a Dockerfile with a unique STAGED marker
+    cat > "$repo/Dockerfile" << 'EOF'
+FROM ubuntu:latest
+RUN echo STAGED_MARKER_ABC123
+EOF
+    git -C "$repo" add Dockerfile
+
+    # Mutate working tree with a different WORKTREE marker
+    cat > "$repo/Dockerfile" << 'EOF'
+FROM ubuntu:latest
+RUN echo WORKTREE_MARKER_XYZ789
+EOF
+    # Do NOT re-stage — staged version has STAGED_MARKER_ABC123
+
+    local stub stubdir
+    stub=$(make_stub_scanner "checkov")
+    stubdir=$(dirname "$stub")
+    run_hook_in_repo "$repo" "scan-checkov.sh" "$FIXTURES_DIR/git-commit.json" "$stubdir"
+
+    # Verify stub was called and received the STAGED content (not working tree)
+    if [ -f "$stub.log" ] && grep -q "STUB_CALLED" "$stub.log"; then
+        if grep -q "STAGED_MARKER_ABC123" "$stub.log" && ! grep -q "WORKTREE_MARKER_XYZ789" "$stub.log"; then
+            pass "checkov: scans staged content, not working tree"
+        else
+            fail "checkov: should see STAGED_MARKER, not WORKTREE_MARKER"
+        fi
+    else
+        fail "checkov: stub scanner was not invoked"
+    fi
+
+    [ -n "$repo" ] && rm -rf "$repo"
+    [ -n "$stubdir" ] && rm -rf "$stubdir"
+}
+run_checkov_staged_test
