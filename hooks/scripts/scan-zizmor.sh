@@ -64,22 +64,40 @@ if ! command -v zizmor &>/dev/null; then
     exit 0
 fi
 
-# ── Collect staged workflow files ───────────────────────────────────
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
-[ -z "$STAGED_FILES" ] && exit 0
+# ── Extract staged workflow files to temp dir ─────────────────────
+SCAN_DIR=$(mktemp -d)
+trap 'rm -rf "$SCAN_DIR"' EXIT
 
-WORKFLOW_FILES=$(echo "$STAGED_FILES" | grep -E '\.github/workflows/.*\.(yml|yaml)$' || true)
-[ -z "$WORKFLOW_FILES" ] && exit 0
+EXTRACTED=0
+EXPECTED=0
+while IFS= read -r -d '' wf; do
+    [ -z "$wf" ] && continue
 
-# ── Scan workflow files (warn only — never blocks) ──────────────────
-while IFS= read -r wf; do
-    [ -f "$wf" ] || continue
-    OUTPUT=$(zizmor --no-progress "$wf" 2>&1) || true
+    case "$wf" in
+        .github/workflows/*.yml|.github/workflows/*.yaml) ;;
+        *)                                                 continue ;;
+    esac
+
+    local_mode=$(git ls-files -s -- "$wf" 2>/dev/null | cut -d' ' -f1)
+    [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ] && continue
+
+    EXPECTED=$((EXPECTED + 1))
+    mkdir -p "$SCAN_DIR/$(dirname "$wf")" 2>/dev/null || continue
+    git show ":$wf" > "$SCAN_DIR/$wf" 2>/dev/null || continue
+    EXTRACTED=$((EXTRACTED + 1))
+
+    OUTPUT=$(zizmor --no-progress "$SCAN_DIR/$wf" 2>&1) || true
     if echo "$OUTPUT" | grep -qE '(warning|error)\['; then
         HITS=$(echo "$OUTPUT" | grep -cE '(warning|error)\[' 2>/dev/null || echo "0")
         echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
         echo "$OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
     fi
-done <<< "$WORKFLOW_FILES"
+done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
+
+[ "$EXPECTED" -eq 0 ] && exit 0
+
+if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
+    echo "SEATBELT: zizmor: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
 
 exit 0

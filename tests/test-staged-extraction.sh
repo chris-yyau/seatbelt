@@ -178,3 +178,47 @@ run_trivy_staged_test() {
     rm -rf "$repo" "$(dirname "$stub")" "$fake_cache"
 }
 run_trivy_staged_test
+
+# ── Test: zizmor scans staged content, not working tree ───────────
+run_zizmor_staged_test() {
+    local repo
+    repo=$(make_test_repo)
+
+    # Stage a workflow with known content
+    mkdir -p "$repo/.github/workflows"
+    echo 'name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3' > "$repo/.github/workflows/ci.yml"
+    git -C "$repo" add .github/workflows/ci.yml
+
+    # Mutate working tree (pin the action)
+    echo 'name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608' > "$repo/.github/workflows/ci.yml"
+
+    local stub
+    stub=$(make_stub_scanner "zizmor")
+    run_hook_in_repo "$repo" "scan-zizmor.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+
+    if [ -f "$stub.log" ] && grep -q "STUB_CALLED" "$stub.log"; then
+        # Staged version uses @v3 (unpinned), working tree uses pinned SHA
+        if grep -q "actions/checkout@v3" "$stub.log"; then
+            pass "zizmor: scans staged content, not working tree"
+        else
+            fail "zizmor: should see staged content (@v3), not working tree"
+        fi
+    else
+        fail "zizmor: stub scanner was not invoked"
+    fi
+
+    rm -rf "$repo" "$(dirname "$stub")"
+}
+run_zizmor_staged_test
