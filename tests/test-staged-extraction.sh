@@ -222,3 +222,55 @@ jobs:
     rm -rf "$repo" "$(dirname "$stub")"
 }
 run_zizmor_staged_test
+
+# ── Test: symlink entries are skipped ─────────────────────────────
+run_symlink_rejection_test() {
+    local repo
+    repo=$(make_test_repo)
+
+    # Create a regular Dockerfile and a symlink Dockerfile
+    echo "FROM ubuntu:latest" > "$repo/Dockerfile"
+    git -C "$repo" add Dockerfile
+    git -C "$repo" commit -q -m "add dockerfile"
+
+    # Stage a symlink that looks like a Dockerfile
+    ln -s /etc/passwd "$repo/Dockerfile.link"
+    git -C "$repo" add Dockerfile.link
+
+    local stub
+    stub=$(make_stub_scanner "checkov")
+    run_hook_in_repo "$repo" "scan-checkov.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+
+    # Symlink should NOT be scanned
+    if [ -f "$stub.log" ] && grep -q "Dockerfile.link" "$stub.log"; then
+        fail "symlink: Dockerfile.link should be skipped"
+    else
+        pass "symlink: non-blob entries are skipped"
+    fi
+
+    rm -rf "$repo" "$(dirname "$stub")"
+}
+run_symlink_rejection_test
+
+# ── Test: filenames with spaces work ──────────────────────────────
+run_spaces_test() {
+    local repo
+    repo=$(make_test_repo)
+
+    mkdir -p "$repo/.github/workflows"
+    echo "name: test" > "$repo/.github/workflows/my workflow.yml"
+    git -C "$repo" add ".github/workflows/my workflow.yml"
+
+    local stub
+    stub=$(make_stub_scanner "zizmor")
+    run_hook_in_repo "$repo" "scan-zizmor.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+
+    if [ -f "$stub.log" ] && grep -q "STUB_CALLED" "$stub.log"; then
+        pass "spaces: filenames with spaces are extracted and scanned"
+    else
+        fail "spaces: filenames with spaces should be scannable"
+    fi
+
+    rm -rf "$repo" "$(dirname "$stub")"
+}
+run_spaces_test
