@@ -37,6 +37,8 @@ prev=""
 for arg in "$@"; do
     if [ "$prev" = "--file" ] && [ -f "$arg" ]; then
         echo "STUB_CONTENT: $(cat "$arg")" >> "$0.log"
+    elif [ -f "$arg" ] && case "$arg" in /*) true;; */*) true;; *) false;; esac; then
+        echo "STUB_CONTENT: $(cat "$arg")" >> "$0.log"
     fi
     prev="$arg"
 done
@@ -138,3 +140,41 @@ EOF
     [ -n "$stubdir" ] && rm -rf "$stubdir"
 }
 run_checkov_staged_test
+
+# ── Test: trivy scans staged content, not working tree ────────────
+run_trivy_staged_test() {
+    local repo
+    repo=$(make_test_repo)
+
+    # Stage a package-lock.json with specific content
+    echo '{"name":"test","lockfileVersion":2,"dependencies":{"bad-pkg":"1.0.0"}}' > "$repo/package-lock.json"
+    git -C "$repo" add package-lock.json
+
+    # Mutate working tree
+    echo '{"name":"test","lockfileVersion":2,"dependencies":{"good-pkg":"2.0.0"}}' > "$repo/package-lock.json"
+
+    # Provision fake trivy DB cache (scan-trivy.sh checks this before scanning)
+    local fake_cache
+    fake_cache=$(mktemp -d)
+    mkdir -p "$fake_cache/db"
+    touch "$fake_cache/db/placeholder"
+
+    local stub
+    stub=$(make_stub_scanner "trivy")
+    TRIVY_CACHE_DIR="$fake_cache" run_hook_in_repo "$repo" "scan-trivy.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+
+    if [ -f "$stub.log" ] && grep -q "STUB_CALLED" "$stub.log"; then
+        if grep -q "bad-pkg" "$stub.log" && ! grep -q "good-pkg" "$stub.log"; then
+            pass "trivy: scans staged content, not working tree"
+        elif grep -q "good-pkg" "$stub.log"; then
+            fail "trivy: scanned working tree content (good-pkg) instead of staged"
+        else
+            fail "trivy: should see staged content (bad-pkg), not working tree"
+        fi
+    else
+        fail "trivy: stub scanner was not invoked"
+    fi
+
+    rm -rf "$repo" "$(dirname "$stub")" "$fake_cache"
+}
+run_trivy_staged_test
