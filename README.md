@@ -34,13 +34,15 @@ Then install the scanner binaries you want:
 
 ```bash
 # macOS (recommended: install all four)
-brew install gitleaks trivy
-pip3 install checkov zizmor
+brew install gitleaks checkov trivy zizmor
 
-# Linux
-pip3 install checkov zizmor
-# gitleaks: https://github.com/gitleaks/gitleaks/releases
-# trivy: https://github.com/aquasecurity/trivy/releases
+# Linux (brew if available, otherwise pip3/releases)
+brew install gitleaks checkov trivy zizmor
+# Or without brew:
+#   gitleaks: https://github.com/gitleaks/gitleaks/releases
+#   trivy:    https://github.com/aquasecurity/trivy/releases
+#   checkov:  pip3 install checkov
+#   zizmor:   pip3 install zizmor (or cargo install zizmor)
 
 # Check what's installed
 /seatbelt:doctor
@@ -48,14 +50,16 @@ pip3 install checkov zizmor
 
 ## How it works
 
-Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) on the Bash tool. Each hook receives the command as JSON, checks if it contains `git commit` via a fast string pre-filter, and exits immediately if not — so non-commit commands have near-zero overhead.
+Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) on the Bash tool. Each hook checks if the command is a `git commit` and exits immediately if not — non-commit commands have near-zero overhead.
 
 When a `git commit` is detected:
 
-- **gitleaks** runs `gitleaks protect --staged` on the staged diff
-- **checkov** scans staged IaC files by name (Dockerfiles, Terraform, k8s manifests, etc.) using the working tree copy
-- **trivy** scans lock files (package-lock.json, Cargo.lock, go.sum, etc.) present in the staged file list for known CVEs, using the on-disk copy
-- **zizmor** scans GitHub Actions workflow files present in the staged file list
+- **gitleaks** scans the staged diff for secrets
+- **checkov** scans IaC files that appear in the staged file list (Dockerfiles, Terraform, k8s manifests, etc.)
+- **trivy** scans lock files that appear in the staged file list for known CVEs
+- **zizmor** scans workflow files that appear in the staged file list
+
+Note: gitleaks scans the actual staged diff. The other three scan the on-disk copy of files identified in the staging area.
 
 ## Skip / bypass
 
@@ -84,8 +88,8 @@ Checks which scanners are installed, reports versions, and provides platform-spe
 
 ## Requirements
 
-- **bash** 3.2+
-- **python3** (for JSON parsing in hook scripts)
+- **bash** 3.2+ (macOS default is fine)
+- **python3** (for JSON parsing in hook scripts; `brew install python3` if not present)
 - **git**
 - Scanner binaries: any combination of gitleaks, checkov, trivy, zizmor
 
@@ -94,7 +98,7 @@ Checks which scanners are installed, reports versions, and provides platform-spe
 | Scanner | Files scanned |
 |---------|--------------|
 | gitleaks | All staged changes |
-| checkov | Dockerfile, *.tf, docker-compose.yml, .github/workflows/*.yml, k8s/*.yml, helm/*.yml |
+| checkov | Dockerfile, *.tf, *.tf.json, docker-compose.yml, .github/workflows/*.yml, k8s/*.yml, helm/*.yml |
 | trivy | package-lock.json, yarn.lock, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, Pipfile.lock, go.sum, Gemfile.lock, composer.lock |
 | zizmor | .github/workflows/*.yml, .github/workflows/*.yaml |
 
