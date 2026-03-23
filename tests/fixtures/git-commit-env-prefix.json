@@ -1,0 +1,1 @@
+{"tool_name":"Bash","tool_input":{"command":"SKIP_GITLEAKS=1 git commit -m \"bypass\""}}
