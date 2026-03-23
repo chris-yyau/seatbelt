@@ -99,7 +99,11 @@ fi
 # ── Scan lock files (warn only — never blocks) ─────────────────────
 while IFS= read -r lf; do
     [ -f "$lf" ] || continue
-    OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$lf" 2>/dev/null) || true
+    if [ -n "$TIMEOUT_CMD" ]; then
+        OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$lf" 2>/dev/null) || true
+    else
+        OUTPUT=$(trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$lf" 2>/dev/null) || true
+    fi
     HAS_VULNS=$(echo "$OUTPUT" | grep -E "Total: [1-9]" 2>/dev/null || true)
     if [ -n "$HAS_VULNS" ]; then
         echo "SEATBELT: trivy found vulnerabilities in $(basename "$lf"):" >&2

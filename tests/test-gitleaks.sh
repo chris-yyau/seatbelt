@@ -129,3 +129,26 @@ test_gitleaks_quoted_env_commit() {
         pass "gitleaks detects quoted-env commit" || fail "gitleaks detects quoted-env commit"
 }
 test_gitleaks_quoted_env_commit
+
+# ── Amend commit detection ───────────────────────────────────────────
+test_gitleaks_amend_commit() {
+    local tmpbin
+    tmpbin=$(make_degraded_path)
+    ERRORS=""
+    STDOUT=""
+    STDERR=""
+    EXIT_CODE=0
+    local tmpout tmperr
+    tmpout=$(mktemp)
+    tmperr=$(mktemp)
+    (
+        export PATH="$tmpbin"
+        cat "$FIXTURES_DIR/git-commit-amend.json" | bash "$GITLEAKS_SCRIPT" >"$tmpout" 2>"$tmperr"
+    ) || EXIT_CODE=$?
+    STDOUT=$(cat "$tmpout" 2>/dev/null || true)
+    STDERR=$(cat "$tmperr" 2>/dev/null || true)
+    rm -f "$tmpout" "$tmperr" && rm -rf "$tmpbin"
+    assert_exit_0 && assert_stderr_contains "SEATBELT DEGRADED" && \
+        pass "gitleaks detects amend commit" || fail "gitleaks detects amend commit"
+}
+test_gitleaks_amend_commit
