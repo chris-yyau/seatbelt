@@ -1,0 +1,1 @@
+{"tool_name":"Bash","tool_input":{"command":"FOO=\"a b\" git commit -m \"feat: quoted env\""}}

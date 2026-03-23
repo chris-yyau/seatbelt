@@ -2,10 +2,35 @@
 # Seatbelt doctor: detect installed scanners and report status as JSON
 set -euo pipefail
 
+# ── Helper: JSON-escape a string via python3 ────────────────────────
+json_str() {
+    local val="$1"
+    if [ -z "$val" ]; then
+        printf 'null'
+    elif command -v python3 &>/dev/null; then
+        python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$val" | tr -d '\n'
+    else
+        # Fallback: escape quotes and backslashes
+        local escaped
+        escaped=$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+        printf '"%s"' "$escaped"
+    fi
+}
+
+# ── Helper: get version for a known tool ─────────────────────────────
+get_version() {
+    local name="$1"
+    case "$name" in
+        gitleaks) gitleaks version 2>/dev/null | head -1 ;;
+        checkov)  checkov --version 2>/dev/null | head -1 ;;
+        trivy)    trivy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
+        zizmor)   zizmor --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
+    esac
+}
+
 # ── Helper: check tool and get version ──────────────────────────────
 check_tool() {
     local name="$1"
-    local version_cmd="$2"
     local path=""
     local version=""
     local installed=false
@@ -13,7 +38,7 @@ check_tool() {
     path=$(command -v "$name" 2>/dev/null || true)
     if [ -n "$path" ]; then
         installed=true
-        version=$(eval "$version_cmd" 2>/dev/null | head -1 || true)
+        version=$(get_version "$name" || true)
     fi
 
     # checkov fallback: python3 -m checkov
@@ -27,8 +52,8 @@ check_tool() {
 
     printf '{"installed":%s,"version":%s,"path":%s}' \
         "$installed" \
-        "$([ -n "$version" ] && printf '"%s"' "$version" || printf 'null')" \
-        "$([ -n "$path" ] && printf '"%s"' "$path" || printf 'null')"
+        "$(json_str "$version")" \
+        "$(json_str "$path")"
 }
 
 # ── Detect platform ────────────────────────────────────────────────
@@ -44,10 +69,10 @@ for pm in brew pip3 cargo apt-get go; do
 done
 
 # ── Check each scanner ─────────────────────────────────────────────
-GITLEAKS=$(check_tool "gitleaks" "gitleaks version")
-CHECKOV=$(check_tool "checkov" "checkov --version")
-TRIVY=$(check_tool "trivy" "trivy --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'")
-ZIZMOR=$(check_tool "zizmor" "zizmor --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+'")
+GITLEAKS=$(check_tool "gitleaks")
+CHECKOV=$(check_tool "checkov")
+TRIVY=$(check_tool "trivy")
+ZIZMOR=$(check_tool "zizmor")
 
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF

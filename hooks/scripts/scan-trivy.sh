@@ -27,7 +27,7 @@ if ! command -v python3 &>/dev/null; then
 fi
 
 IS_GIT_COMMIT=$(printf '%s' "$HOOK_DATA" | python3 -c "
-import sys, json, re
+import sys, json, re, shlex
 try:
     d = json.load(sys.stdin)
     tool = d.get('tool_name', d.get('toolName', ''))
@@ -39,9 +39,16 @@ try:
     cmd = inp.get('command', '')
     for seg in re.split(r'&&|\|\||[;\n|]', cmd):
         seg = seg.strip()
-        while re.match(r'^\w+=\S*\s', seg):
-            seg = re.sub(r'^\w+=\S*\s+', '', seg, count=1)
-        if re.match(r'git\s+commit\b', seg):
+        if not seg:
+            continue
+        try:
+            tokens = shlex.split(seg)
+        except ValueError:
+            tokens = shlex.split(seg, posix=False)
+        # Skip leading KEY=VALUE tokens
+        while tokens and re.match(r'^\w+=', tokens[0]):
+            tokens = tokens[1:]
+        if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
             print('yes')
             break
 except Exception:
