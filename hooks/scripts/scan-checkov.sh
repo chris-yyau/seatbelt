@@ -27,7 +27,10 @@ block_emit() {
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
 # shellcheck disable=SC1091
-source "$LIB_DIR/detect-commit.sh"
+if ! source "$LIB_DIR/detect-commit.sh"; then
+    echo "SEATBELT DEGRADED: checkov commit detection unavailable — checkov scan skipped" >&2
+    exit 0
+fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 

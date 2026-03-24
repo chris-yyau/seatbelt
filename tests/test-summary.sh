@@ -142,3 +142,38 @@ test_summary_multi_file_scanner() {
     fi
 }
 test_summary_multi_file_scanner
+
+# ── Summary handles non-numeric lines gracefully ─────────────
+test_summary_non_numeric_lines() {
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local resultdir="$tmpdir/seatbelt-results"
+    mkdir -p "$resultdir"
+    # Simulate a result file with a non-numeric prefix (e.g. corrupted data)
+    printf 'unexpected line with no number\n2 vulnerabilities in package-lock.json\n' > "$resultdir/trivy"
+
+    ERRORS=""
+    STDOUT=""
+    STDERR=""
+    EXIT_CODE=0
+    local tmpout tmperr
+    tmpout=$(mktemp)
+    tmperr=$(mktemp)
+    (
+        export SEATBELT_RESULT_DIR="$resultdir"
+        cat "$FIXTURES_DIR/git-commit.json" | bash "$SUMMARY_SCRIPT" >"$tmpout" 2>"$tmperr"
+    ) || EXIT_CODE=$?
+    STDOUT=$(cat "$tmpout" 2>/dev/null || true)
+    STDERR=$(cat "$tmperr" 2>/dev/null || true)
+    rm -f "$tmpout" "$tmperr"
+    rm -rf "$tmpdir"
+
+    assert_exit_0
+    if echo "$STDERR" | grep -qF "2 finding(s) from 1 scanner(s)"; then
+        pass "summary: handles non-numeric lines gracefully"
+    else
+        ERRORS="\n  Expected '2 finding(s) from 1 scanner(s)', got: $STDERR"
+        fail "summary: handles non-numeric lines gracefully"
+    fi
+}
+test_summary_non_numeric_lines

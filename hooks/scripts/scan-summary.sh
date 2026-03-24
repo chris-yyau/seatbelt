@@ -12,7 +12,10 @@ set -euo pipefail
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
 # shellcheck disable=SC1091
-source "$LIB_DIR/detect-commit.sh"
+if ! source "$LIB_DIR/detect-commit.sh"; then
+    echo "SEATBELT DEGRADED: summary commit detection unavailable — summary skipped" >&2
+    exit 0
+fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 
 # ── Compute result directory (repo-specific to avoid cross-repo collisions) ──
@@ -36,8 +39,8 @@ for result_file in "$SEATBELT_RESULT_DIR"/*; do
 
     while IFS= read -r line; do
         [ -z "$line" ] && continue
-        line_count=$(echo "$line" | grep -oE '^[0-9]+' | head -1 || true)
-        line_count=${line_count:-0}
+        line_count=$(echo "$line" | grep -oE '^[0-9]+' | head -1) || true
+        [ -z "${line_count:-}" ] && line_count=0
         if [ "$line_count" -gt 0 ] 2>/dev/null; then
             scanner_total=$((scanner_total + line_count))
         fi

@@ -15,9 +15,20 @@ trap 'exit 0' ERR  # fail-open on script errors
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
 # shellcheck disable=SC1091
-source "$LIB_DIR/detect-commit.sh"
+if ! source "$LIB_DIR/detect-commit.sh"; then
+    echo "SEATBELT DEGRADED: zizmor commit detection unavailable — zizmor scan skipped" >&2
+    exit 0
+fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
+
+# ── Clean stale results from a previous blocked commit ───────────
+# PreToolUse scanners write results, but if a blocking scanner prevents the
+# commit, the PostToolUse summary hook never fires and stale files persist.
+# Clean unconditionally on every commit attempt, before any early exits.
+# shellcheck disable=SC1091
+source "$LIB_DIR/result-dir.sh"
+rm -f "$SEATBELT_RESULT_DIR/zizmor"
 
 # ── zizmor availability ─────────────────────────────────────────────
 if ! command -v zizmor &>/dev/null; then
@@ -90,8 +101,6 @@ except Exception:
             echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
             echo "$SCAN_OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
             # Write result for summary aggregation (append: multiple workflows may have findings)
-            # shellcheck disable=SC1091
-            source "$LIB_DIR/result-dir.sh"
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
         elif [ -n "$SCAN_OUTPUT" ]; then
@@ -106,8 +115,6 @@ except Exception:
                 printf '%s\n' "$FINDING_SUMMARY" >&2
             fi
             # Write result for summary aggregation (append: multiple workflows may have findings)
-            # shellcheck disable=SC1091
-            source "$LIB_DIR/result-dir.sh"
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${FINDING_COUNT} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
         fi
