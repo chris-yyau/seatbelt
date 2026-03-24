@@ -64,12 +64,19 @@ if ! command -v trivy &>/dev/null; then
     exit 0
 fi
 
-# ── Collect staged lock files ───────────────────────────────────────
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
-[ -z "$STAGED_FILES" ] && exit 0
+# ── Early exit: no lock files staged ──────────────────────────────
+HAS_LOCKFILES=0
+while IFS= read -r -d '' path; do
+    case "$path" in
+        *package-lock.json|*yarn.lock|*pnpm-lock.yaml|*Cargo.lock|*requirements.txt|*poetry.lock|*uv.lock|*Pipfile.lock|*go.sum|*Gemfile.lock|*composer.lock)
+            HAS_LOCKFILES=1; break ;;
+    esac
+done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+[ "$HAS_LOCKFILES" -eq 0 ] && exit 0
 
-LOCKFILES=$(echo "$STAGED_FILES" | grep -E '(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|requirements\.txt|poetry\.lock|uv\.lock|Pipfile\.lock|go\.sum|Gemfile\.lock|composer\.lock)$' || true)
-[ -z "$LOCKFILES" ] && exit 0
+# ── Extract staged lock files to temp dir ─────────────────────────
+SCAN_DIR=$(mktemp -d)
+trap 'rm -rf "$SCAN_DIR"' EXIT
 
 # ── Check trivy DB cache ───────────────────────────────────────────
 TRIVY_CACHE="${TRIVY_CACHE_DIR:-}"
@@ -96,15 +103,43 @@ elif command -v gtimeout &>/dev/null; then
     TIMEOUT_CMD="gtimeout 30"
 fi
 
-# ── Scan lock files (warn only — never blocks) ─────────────────────
-while IFS= read -r lf; do
-    [ -f "$lf" ] || continue
-    OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$lf" 2>/dev/null) || true
+EXTRACTED=0
+EXPECTED=0
+while IFS= read -r -d '' lf; do
+    [ -z "$lf" ] && continue
+
+    case "$lf" in
+        *package-lock.json|*yarn.lock|*pnpm-lock.yaml) ;;
+        *Cargo.lock|*requirements.txt|*poetry.lock)     ;;
+        *uv.lock|*Pipfile.lock|*go.sum)                 ;;
+        *Gemfile.lock|*composer.lock)                    ;;
+        *)                                              continue ;;
+    esac
+
+    local_mode=$(git ls-files -s -- "$lf" 2>/dev/null | cut -d' ' -f1)
+    if [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ]; then continue; fi
+
+    EXPECTED=$((EXPECTED + 1))
+    mkdir -p "$SCAN_DIR/$(dirname "$lf")" 2>/dev/null || continue
+    git show ":$lf" > "$SCAN_DIR/$lf" 2>/dev/null || continue
+    EXTRACTED=$((EXTRACTED + 1))
+
+    if [ -n "$TIMEOUT_CMD" ]; then
+        OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$SCAN_DIR/$lf" 2>/dev/null) || true
+    else
+        OUTPUT=$(trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$SCAN_DIR/$lf" 2>/dev/null) || true
+    fi
     HAS_VULNS=$(echo "$OUTPUT" | grep -E "Total: [1-9]" 2>/dev/null || true)
     if [ -n "$HAS_VULNS" ]; then
         echo "SEATBELT: trivy found vulnerabilities in $(basename "$lf"):" >&2
         echo "$OUTPUT" | grep -E "(HIGH|CRITICAL)" | head -5 >&2
     fi
-done <<< "$LOCKFILES"
+done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
+
+[ "$EXPECTED" -eq 0 ] && exit 0
+
+if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
+    echo "SEATBELT: trivy: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
 
 exit 0

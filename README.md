@@ -1,6 +1,6 @@
 # Seatbelt
 
-Zero-config security scanning for vibe coders. Seatbelt is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) that runs security scanners automatically before every `git commit`.
+Zero-config security scanning for vibe coders. Seatbelt is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) that automatically scans your staged changes before every `git commit`.
 
 ## What it does
 
@@ -13,39 +13,51 @@ Seatbelt intercepts `git commit` commands and runs four security scanners on you
 | **trivy** | Dependency CVEs in lock files (HIGH/CRITICAL severity) | warn — findings shown, commit allowed |
 | **zizmor** | GitHub Actions workflow security issues (injection, unpinned actions) | warn — findings shown, commit allowed |
 
-Scanners that aren't installed are silently skipped with a degraded-mode warning. Install what you need — Seatbelt works with any combination.
+You don't need all four installed. Scanners that aren't found are skipped with a warning like:
+
+```
+SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)
+```
+
+Install any combination you want — Seatbelt works with one scanner or all four.
 
 ## Install
 
+Add the marketplace and install the plugin:
+
 ```bash
-claude plugin add seatbelt
+claude plugin marketplace add chris-yyau/seatbelt
+claude plugin install seatbelt@seatbelt
 ```
 
 Then install the scanner binaries you want:
 
 ```bash
 # macOS (recommended: install all four)
-brew install gitleaks checkov trivy
-pip3 install zizmor
+brew install gitleaks checkov trivy zizmor
 
-# Linux
-brew install gitleaks trivy
-pip3 install checkov zizmor
+# Linux (brew if available, otherwise pip3/releases)
+brew install gitleaks checkov trivy zizmor
+# Or without brew:
+#   gitleaks: https://github.com/gitleaks/gitleaks/releases
+#   trivy:    https://github.com/aquasecurity/trivy/releases
+#   checkov:  pip3 install checkov
+#   zizmor:   pip3 install zizmor (or cargo install zizmor)
 
 # Check what's installed
-/seatbelt doctor
+/seatbelt:doctor
 ```
 
 ## How it works
 
-Each scanner runs as a [PreToolUse hook](https://docs.anthropic.com/en/docs/claude-code/hooks) that fires before every Bash tool invocation. The hooks:
+Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) on the Bash tool. Each hook checks if the command is a `git commit` and exits immediately if not — non-commit commands have near-zero overhead.
 
-1. Read the tool invocation JSON from stdin
-2. Check if the command contains `git commit`
-3. If yes, run the relevant scanner on staged files
-4. Emit `{"decision":"block"}` (gitleaks/checkov) or print warnings (trivy/zizmor)
+When a `git commit` is detected, seatbelt uses two approaches to scan staged content:
 
-Non-commit commands (npm install, git push, grep, etc.) pass through instantly — the fast pre-filter adds negligible overhead.
+- **gitleaks** reads the git staging area directly via its `--staged` flag
+- **checkov, trivy, zizmor** extract staged file content to a temp directory via `git show`, then scan the extracted files. This ensures scanners see exactly what will be committed, not the current working tree.
+
+If you use partial staging (`git add -p`), seatbelt scans exactly the hunks you staged.
 
 ## Skip / bypass
 
@@ -68,25 +80,32 @@ Suppress specific findings:
 
 ## Commands
 
-### `/seatbelt doctor`
+### `/seatbelt:doctor`
 
 Checks which scanners are installed, reports versions, and provides platform-specific install instructions for anything missing.
 
 ## Requirements
 
 - **bash** 3.2+ (macOS default is fine)
-- **python3** (for JSON parsing in hook scripts)
-- **git** (obviously)
-- Scanner binaries: install any combination of gitleaks, checkov, trivy, zizmor
+- **python3** (for JSON parsing in hook scripts; `brew install python3` if not present)
+- **git**
+- Scanner binaries: any combination of gitleaks, checkov, trivy, zizmor
 
 ## Supported file types
 
 | Scanner | Files scanned |
 |---------|--------------|
 | gitleaks | All staged changes |
-| checkov | Dockerfile, *.tf, docker-compose.yml, .github/workflows/*.yml, k8s/*.yml, helm/*.yml |
+| checkov | Dockerfile, *.tf, *.tf.json, docker-compose.yml, .github/workflows/*.yml, k8s/*.yml, helm/*.yml |
 | trivy | package-lock.json, yarn.lock, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, Pipfile.lock, go.sum, Gemfile.lock, composer.lock |
 | zizmor | .github/workflows/*.yml, .github/workflows/*.yaml |
+
+## Uninstall
+
+```bash
+claude plugin uninstall seatbelt@seatbelt
+claude plugin marketplace remove seatbelt
+```
 
 ## License
 
