@@ -53,13 +53,11 @@ get_install_cmd() {
     local has_brew="false"
     local has_pip3="false"
     local has_cargo="false"
-    local has_apt="false"
     local has_go="false"
 
     if echo "$PMS_RAW" | grep -qw "brew";    then has_brew="true";  fi
     if echo "$PMS_RAW" | grep -qw "pip3";    then has_pip3="true";  fi
     if echo "$PMS_RAW" | grep -qw "cargo";   then has_cargo="true"; fi
-    if echo "$PMS_RAW" | grep -qw "apt-get"; then has_apt="true";   fi
     if echo "$PMS_RAW" | grep -qw "go";      then has_go="true";    fi
 
     case "$name" in
