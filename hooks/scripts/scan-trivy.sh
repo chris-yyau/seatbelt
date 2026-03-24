@@ -83,7 +83,7 @@ while IFS= read -r -d '' lf; do
     git show ":$lf" > "$SCAN_DIR/$lf" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    trivy_stderr=$(mktemp)
+    trivy_stderr="$SCAN_DIR/.trivy_stderr_$(basename "$lf")"
     if [ -n "$TIMEOUT_CMD" ]; then
         SCAN_OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>"$trivy_stderr") || true
     else
@@ -134,7 +134,6 @@ except Exception:
             fi
         fi
     fi
-    rm -f "$trivy_stderr"
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
 [ "$EXPECTED" -eq 0 ] && exit 0
