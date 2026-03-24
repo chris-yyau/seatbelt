@@ -74,7 +74,16 @@ CHECKOV=$(check_tool "checkov")
 TRIVY=$(check_tool "trivy")
 ZIZMOR=$(check_tool "zizmor")
 
+# ── Compute health score ─────────────────────────────────────────────
+INSTALLED_COUNT=0
+for check_var in "$GITLEAKS" "$CHECKOV" "$TRIVY" "$ZIZMOR"; do
+    case "$check_var" in
+        *'"installed":true'*) INSTALLED_COUNT=$((INSTALLED_COUNT + 1)) ;;
+    esac
+done
+HEALTH="{\"installed\":${INSTALLED_COUNT},\"total\":4,\"score\":\"${INSTALLED_COUNT}/4\"}"
+
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF
-{"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"platform":"${PLATFORM}","package_managers":[${PMS}]}
+{"health":${HEALTH},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"platform":"${PLATFORM}","package_managers":[${PMS}]}
 EOF
