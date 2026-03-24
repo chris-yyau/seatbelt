@@ -102,14 +102,14 @@ test_doctor_install_cmd_selection() {
     rm -rf "$tmpbin"
     ERRORS=""
     if ! echo "$STDOUT" | python3 -c "
-import sys, json, re
+import sys, json, shutil
 d = json.load(sys.stdin)
 # Known-good prefixes for each tool when brew is absent
 expected = {
-    'gitleaks': ('go install', 'https://'),
-    'checkov':  ('pip3', 'https://'),
-    'trivy':    ('apt-get', 'sudo apt-get', 'https://'),
-    'zizmor':   ('pip3', 'cargo', 'https://'),
+    'gitleaks': ('go install',) if shutil.which('go') else ('https://',),
+    'checkov':  ('pip3',) if shutil.which('pip3') else ('https://',),
+    'trivy':    ('https://',),  # apt-get requires external repo — always link to install docs
+    'zizmor':   ('pip3',) if shutil.which('pip3') else (('cargo',) if shutil.which('cargo') else ('https://',)),
 }
 for tool, prefixes in expected.items():
     cmd = d[tool].get('install_cmd')

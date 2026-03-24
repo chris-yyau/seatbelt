@@ -84,8 +84,6 @@ get_install_cmd() {
         trivy)
             if [ "$has_brew" = "true" ]; then
                 echo "brew install trivy"
-            elif [ "$has_apt" = "true" ]; then
-                echo "sudo apt-get install -y trivy"
             else
                 echo "https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
             fi

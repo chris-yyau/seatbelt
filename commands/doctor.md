@@ -40,6 +40,7 @@ For trivy: if it is installed but `db_cached` is false in the JSON output, show 
 
 **gitleaks** — Scans for hardcoded secrets, API keys, and credentials in staged changes:
 - If `brew` in package_managers: `brew install gitleaks`
+- If `go` in package_managers: `go install github.com/gitleaks/gitleaks/v8@latest`
 - Otherwise: download binary from https://github.com/gitleaks/gitleaks/releases
 
 **checkov** — Checks Infrastructure-as-Code files (Dockerfiles, Terraform, k8s) for security misconfigurations:
@@ -48,7 +49,7 @@ For trivy: if it is installed but `db_cached` is false in the JSON output, show 
 
 **trivy** — Scans dependency lock files for known HIGH/CRITICAL vulnerabilities (CVEs):
 - If `brew` in package_managers: `brew install trivy`
-- Otherwise: download binary from https://github.com/aquasecurity/trivy/releases (note: `apt-get install trivy` requires adding Aqua's APT repository first)
+- Otherwise: follow install guide at https://aquasecurity.github.io/trivy/latest/getting-started/installation/ (note: `apt-get install trivy` requires adding Aqua's APT repository first)
 
 **zizmor** — Checks GitHub Actions workflows for security issues (injection risks, unpinned actions):
 - If `pip3` in package_managers: `pip3 install zizmor`
