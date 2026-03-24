@@ -23,14 +23,24 @@ Install any combination you want — Seatbelt works with one scanner or all four
 
 ## Install
 
-Add the marketplace and install the plugin:
+Add the marketplace and install the plugin, then let seatbelt guide you through scanner setup:
 
 ```bash
 claude plugin marketplace add chris-yyau/seatbelt
 claude plugin install seatbelt@seatbelt
 ```
 
-Then install the scanner binaries you want:
+Then run setup inside Claude Code:
+
+```
+/seatbelt:setup
+```
+
+`/seatbelt:setup` detects what's missing, proposes install commands grouped by package manager, asks for your confirmation, then runs smoke tests to verify everything works.
+
+### Manual Install
+
+If you prefer to install scanner binaries yourself:
 
 ```bash
 # macOS (recommended: install all four)
@@ -43,9 +53,6 @@ brew install gitleaks checkov trivy zizmor
 #   trivy:    https://github.com/aquasecurity/trivy/releases
 #   checkov:  pip3 install checkov
 #   zizmor:   pip3 install zizmor (or cargo install zizmor)
-
-# Check what's installed
-/seatbelt:doctor
 ```
 
 ## How it works
@@ -58,6 +65,17 @@ When a `git commit` is detected, seatbelt uses two approaches to scan staged con
 - **checkov, trivy, zizmor** extract staged file content to a temp directory via `git show`, then scan the extracted files. This ensures scanners see exactly what will be committed, not the current working tree.
 
 If you use partial staging (`git add -p`), seatbelt scans exactly the hunks you staged.
+
+## How setup works
+
+`/seatbelt:setup` is a one-stop onboarding command that:
+
+1. Runs the doctor script to detect installed scanners and their versions
+2. Shows a health score (`Seatbelt Health: N/4 scanners active`)
+3. Groups missing scanners by package manager into batched install commands
+4. Asks for your confirmation before running anything
+5. Re-runs the doctor after installation to confirm success
+6. Runs smoke tests on each newly installed scanner (creates a temp git repo with representative test files, runs the scanner binary directly, and reports OK / FAIL / NEEDS DB)
 
 ## Skip / bypass
 
@@ -80,9 +98,13 @@ Suppress specific findings:
 
 ## Commands
 
+### `/seatbelt:setup`
+
+One-stop onboarding: detects missing scanners, proposes install commands grouped by package manager, asks for confirmation, installs, then runs smoke tests to verify each scanner works. Shows a final health score.
+
 ### `/seatbelt:doctor`
 
-Checks which scanners are installed, reports versions, and provides platform-specific install instructions for anything missing.
+Checks which scanners are installed, reports versions, shows a health score (`N/4 scanners active`), flags trivy's DB status as a distinct condition, and provides platform-specific install instructions for anything missing. Suggests `/seatbelt:setup` when tools are missing.
 
 ## Requirements
 
