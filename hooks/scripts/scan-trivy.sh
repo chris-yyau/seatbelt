@@ -161,7 +161,7 @@ except Exception:
     if [ "$FINDING_COUNT" = "-1" ]; then
         # JSON parse failed (truncated output, unexpected format, etc.)
         # Fail-open with a degraded warning rather than silently skipping.
-        trivy_err=$(cat "$trivy_stderr" 2>/dev/null | head -3 || true)
+        trivy_err=$(head -3 < "$trivy_stderr" 2>/dev/null || true)
         if [ -n "$trivy_err" ]; then
             echo "SEATBELT: trivy: could not parse scan output for $(basename "$lf") — ${trivy_err}" >&2
         else

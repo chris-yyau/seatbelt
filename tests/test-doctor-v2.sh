@@ -106,9 +106,9 @@ import sys, json, re
 d = json.load(sys.stdin)
 # Known-good prefixes for each tool when brew is absent
 expected = {
-    'gitleaks': ('apt-get', 'go install', 'https://'),
+    'gitleaks': ('go install', 'https://'),
     'checkov':  ('pip3', 'https://'),
-    'trivy':    ('curl', 'https://'),
+    'trivy':    ('apt-get', 'sudo apt-get', 'https://'),
     'zizmor':   ('pip3', 'cargo', 'https://'),
 }
 for tool, prefixes in expected.items():
