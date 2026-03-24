@@ -119,17 +119,59 @@ while IFS= read -r -d '' staged_file; do
     git show ":$staged_file" > "$SCAN_DIR/$staged_file" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --compact --quiet 2>&1) || true
-    FAILED=$(echo "$OUTPUT" | grep -c "FAILED" 2>/dev/null || true)
-    FAILED=${FAILED:-0}
-    PARSE_ERRORS=$(echo "$OUTPUT" | grep -cE "Parsing errors:" 2>/dev/null || true)
-    PARSE_ERRORS=${PARSE_ERRORS:-0}
+    SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
 
-    if [ "$FAILED" -gt 0 ]; then
-        BLOCKED=1
-        BLOCK_DETAILS="${BLOCK_DETAILS}$(echo "$OUTPUT" | grep "FAILED" | head -3)\n"
-    elif [ "$PARSE_ERRORS" -gt 0 ]; then
-        echo "SEATBELT: checkov parse error in $(basename "$staged_file") — skipping" >&2
+    # Parse JSON for findings
+    FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    # Handle both top-level dict (single file) and list (multi-file) shapes
+    if isinstance(data, list):
+        results = {}
+        for item in data:
+            if isinstance(item, dict) and 'results' in item:
+                results = item.get('results', {})
+                break
+    else:
+        results = data.get('results', {})
+    failed_checks = results.get('failed_checks', [])
+    if not isinstance(failed_checks, list):
+        failed_checks = []
+    count = len(failed_checks)
+    summary_lines = []
+    for fc in failed_checks[:5]:
+        check_id = fc.get('check_id', '')
+        resource = fc.get('resource', '')
+        file_path = fc.get('file_path', '')
+        summary_lines.append(f'  {check_id} on {resource} ({file_path})')
+    summary = '; '.join(summary_lines)
+    print(f'{count}|{summary}')
+except Exception:
+    print('-1|')
+" 2>/dev/null || echo "-1|")
+
+    FINDING_COUNT="${FINDING_INFO%%|*}"
+    FINDING_SUMMARY="${FINDING_INFO#*|}"
+
+    # Fallback to grep if JSON parse failed
+    if [ "$FINDING_COUNT" = "-1" ]; then
+        FAILED=$(echo "$SCAN_OUTPUT" | grep -c "FAILED" 2>/dev/null || true)
+        FAILED=${FAILED:-0}
+        PARSE_ERRORS=$(echo "$SCAN_OUTPUT" | grep -cE "Parsing errors:" 2>/dev/null || true)
+        PARSE_ERRORS=${PARSE_ERRORS:-0}
+
+        if [ "$FAILED" -gt 0 ]; then
+            BLOCKED=1
+            BLOCK_DETAILS="${BLOCK_DETAILS}$(echo "$SCAN_OUTPUT" | grep "FAILED" | head -3)\n"
+        elif [ "$PARSE_ERRORS" -gt 0 ]; then
+            echo "SEATBELT: checkov parse error in $(basename "$staged_file") — skipping" >&2
+        fi
+    else
+        if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+            BLOCKED=1
+            BLOCK_DETAILS="${BLOCK_DETAILS}${FINDING_SUMMARY}\n"
+        fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 

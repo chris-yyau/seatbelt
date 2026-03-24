@@ -45,14 +45,14 @@ assert_stderr_contains() {
 }
 
 assert_stdout_json_block() {
-    if ! echo "$STDOUT" | grep -qF '"decision":"block"'; then
+    if ! echo "$STDOUT" | grep -qE '"decision":[[:space:]]*"block"'; then
         ERRORS="${ERRORS}\n  Expected stdout to contain block decision JSON"
         return 1
     fi
 }
 
 assert_stdout_no_block() {
-    if echo "$STDOUT" | grep -qF '"decision":"block"'; then
+    if echo "$STDOUT" | grep -qE '"decision":[[:space:]]*"block"'; then
         ERRORS="${ERRORS}\n  Expected stdout NOT to contain block decision JSON"
         return 1
     fi

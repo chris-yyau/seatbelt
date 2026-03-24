@@ -125,14 +125,49 @@ while IFS= read -r -d '' lf; do
     EXTRACTED=$((EXTRACTED + 1))
 
     if [ -n "$TIMEOUT_CMD" ]; then
-        OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$SCAN_DIR/$lf" 2>/dev/null) || true
+        SCAN_OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>/dev/null) || true
     else
-        OUTPUT=$(trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress "$SCAN_DIR/$lf" 2>/dev/null) || true
+        SCAN_OUTPUT=$(trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>/dev/null) || true
     fi
-    HAS_VULNS=$(echo "$OUTPUT" | grep -E "Total: [1-9]" 2>/dev/null || true)
-    if [ -n "$HAS_VULNS" ]; then
-        echo "SEATBELT: trivy found vulnerabilities in $(basename "$lf"):" >&2
-        echo "$OUTPUT" | grep -E "(HIGH|CRITICAL)" | head -5 >&2
+
+    # Parse JSON for findings
+    FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    results = data.get('Results', []) or []
+    total = 0
+    summary_lines = []
+    for result in results:
+        vulns = result.get('Vulnerabilities') or []
+        total += len(vulns)
+        for v in vulns[:3]:
+            vid = v.get('VulnerabilityID', '')
+            sev = v.get('Severity', '')
+            pkg = v.get('PkgName', '')
+            ver = v.get('InstalledVersion', '')
+            summary_lines.append(f'  {vid} [{sev}] {pkg} {ver}')
+    summary = '; '.join(summary_lines[:5])
+    print(f'{total}|{summary}')
+except Exception:
+    print('-1|')
+" 2>/dev/null || echo "-1|")
+
+    FINDING_COUNT="${FINDING_INFO%%|*}"
+    FINDING_SUMMARY="${FINDING_INFO#*|}"
+
+    # Handle parse result
+    if [ "$FINDING_COUNT" = "-1" ]; then
+        # JSON parse failed (truncated output, unexpected format, etc.)
+        # Fail-open with a degraded warning rather than silently skipping.
+        echo "SEATBELT: trivy: could not parse scan output for $(basename "$lf") — scan result unknown" >&2
+    else
+        if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+            echo "SEATBELT: trivy found ${FINDING_COUNT} vulnerabilit$([ "$FINDING_COUNT" -eq 1 ] && echo 'y' || echo 'ies') in $(basename "$lf"):" >&2
+            if [ -n "$FINDING_SUMMARY" ]; then
+                printf '%s\n' "$FINDING_SUMMARY" >&2
+            fi
+        fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 

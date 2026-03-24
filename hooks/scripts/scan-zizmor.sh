@@ -86,11 +86,60 @@ while IFS= read -r -d '' wf; do
     git show ":$wf" > "$SCAN_DIR/$wf" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    OUTPUT=$(zizmor --no-progress "$SCAN_DIR/$wf" 2>&1) || true
-    if echo "$OUTPUT" | grep -qE '(warning|error)\['; then
-        HITS=$(echo "$OUTPUT" | grep -cE '(warning|error)\[' 2>/dev/null || echo "0")
-        echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
-        echo "$OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
+    SCAN_OUTPUT=$(zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || true
+
+    # Parse JSON for findings
+    # zizmor v1 JSON schema: top-level array with ident, determinations.severity,
+    # and locations[].symbolic.key.Local.given_path
+    FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    # zizmor outputs a top-level array of findings
+    if not isinstance(data, list):
+        print('-1|')
+        sys.exit(0)
+    count = len(data)
+    summary_lines = []
+    for f in data[:5]:
+        ident = f.get('ident', f.get('rule', ''))
+        det = f.get('determinations', {})
+        severity = det.get('severity', f.get('severity', '')) if isinstance(det, dict) else ''
+        file_path = ''
+        locs = f.get('locations', [])
+        if locs:
+            sym = locs[0].get('symbolic', {})
+            key = sym.get('key', {})
+            local = key.get('Local', {}) if isinstance(key, dict) else {}
+            file_path = local.get('given_path', '') if isinstance(local, dict) else ''
+        summary_lines.append(f'  {ident} [{severity}] {file_path}')
+    summary = '; '.join(summary_lines)
+    print(f'{count}|{summary}')
+except Exception:
+    print('-1|')
+" 2>/dev/null || echo "-1|")
+
+    FINDING_COUNT="${FINDING_INFO%%|*}"
+    FINDING_SUMMARY="${FINDING_INFO#*|}"
+
+    # Fallback to grep if JSON parse failed (handles older zizmor that ignores --format json)
+    if [ "$FINDING_COUNT" = "-1" ]; then
+        if echo "$SCAN_OUTPUT" | grep -qE '(warning|error)\['; then
+            HITS=$(echo "$SCAN_OUTPUT" | grep -cE '(warning|error)\[' 2>/dev/null || echo "0")
+            echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
+            echo "$SCAN_OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
+        elif [ -n "$SCAN_OUTPUT" ]; then
+            # Non-empty output that is neither JSON nor text findings — likely a CLI error
+            # (e.g. --format json unsupported). Emit a degraded warning rather than silently skip.
+            echo "SEATBELT: zizmor: could not parse scan output for $(basename "$wf") — scan result unknown" >&2
+        fi
+    else
+        if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+            echo "SEATBELT: zizmor found ${FINDING_COUNT} issue(s) in $(basename "$wf"):" >&2
+            if [ -n "$FINDING_SUMMARY" ]; then
+                printf '%s\n' "$FINDING_SUMMARY" >&2
+            fi
+        fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
