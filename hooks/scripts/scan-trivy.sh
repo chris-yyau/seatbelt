@@ -124,10 +124,11 @@ while IFS= read -r -d '' lf; do
     git show ":$lf" > "$SCAN_DIR/$lf" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
+    trivy_stderr=$(mktemp)
     if [ -n "$TIMEOUT_CMD" ]; then
-        SCAN_OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>/dev/null) || true
+        SCAN_OUTPUT=$($TIMEOUT_CMD trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>"$trivy_stderr") || true
     else
-        SCAN_OUTPUT=$(trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>/dev/null) || true
+        SCAN_OUTPUT=$(trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress --format json "$SCAN_DIR/$lf" 2>"$trivy_stderr") || true
     fi
 
     # Parse JSON for findings
@@ -160,7 +161,12 @@ except Exception:
     if [ "$FINDING_COUNT" = "-1" ]; then
         # JSON parse failed (truncated output, unexpected format, etc.)
         # Fail-open with a degraded warning rather than silently skipping.
-        echo "SEATBELT: trivy: could not parse scan output for $(basename "$lf") — scan result unknown" >&2
+        trivy_err=$(cat "$trivy_stderr" 2>/dev/null | head -3 || true)
+        if [ -n "$trivy_err" ]; then
+            echo "SEATBELT: trivy: could not parse scan output for $(basename "$lf") — ${trivy_err}" >&2
+        else
+            echo "SEATBELT: trivy: could not parse scan output for $(basename "$lf") — scan result unknown" >&2
+        fi
     else
         if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
             echo "SEATBELT: trivy found ${FINDING_COUNT} vulnerabilit$([ "$FINDING_COUNT" -eq 1 ] && echo 'y' || echo 'ies') in $(basename "$lf"):" >&2
@@ -169,6 +175,7 @@ except Exception:
             fi
         fi
     fi
+    rm -f "$trivy_stderr"
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
 [ "$EXPECTED" -eq 0 ] && exit 0

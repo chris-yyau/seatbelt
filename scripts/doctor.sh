@@ -66,8 +66,6 @@ get_install_cmd() {
         gitleaks)
             if [ "$has_brew" = "true" ]; then
                 echo "brew install gitleaks"
-            elif [ "$has_apt" = "true" ]; then
-                echo "apt-get install gitleaks"
             elif [ "$has_go" = "true" ]; then
                 echo "go install github.com/gitleaks/gitleaks/v8@latest"
             else
@@ -87,7 +85,7 @@ get_install_cmd() {
             if [ "$has_brew" = "true" ]; then
                 echo "brew install trivy"
             elif [ "$has_apt" = "true" ]; then
-                echo "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin"
+                echo "sudo apt-get install -y trivy"
             else
                 echo "https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
             fi
@@ -134,10 +132,12 @@ check_tool() {
         install_cmd="$(json_str "$(get_install_cmd "$name")")"
     fi
 
-    # Trivy gets an extra db_cached field
+    # Trivy gets an extra db_cached field (only meaningful when installed)
     if [ "$name" = "trivy" ]; then
-        local db_cached
-        db_cached=$(check_trivy_db)
+        local db_cached="false"
+        if [ "$installed" = "true" ]; then
+            db_cached=$(check_trivy_db)
+        fi
         printf '{"installed":%s,"version":%s,"path":%s,"db_cached":%s,"install_cmd":%s}' \
             "$installed" \
             "$(json_str "$version")" \
@@ -180,13 +180,18 @@ TRIVY=$(check_tool "trivy")
 ZIZMOR=$(check_tool "zizmor")
 
 # ── Compute health score ─────────────────────────────────────────────
-INSTALLED_COUNT=0
-for check_var in "$GITLEAKS" "$CHECKOV" "$TRIVY" "$ZIZMOR"; do
+# Trivy is "active" only when installed AND db_cached is true.
+# All other scanners are active when installed.
+ACTIVE_COUNT=0
+for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR"; do
     case "$check_var" in
-        *'"installed":true'*) INSTALLED_COUNT=$((INSTALLED_COUNT + 1)) ;;
+        *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
     esac
 done
-HEALTH="{\"installed\":${INSTALLED_COUNT},\"total\":4,\"score\":\"${INSTALLED_COUNT}/4\"}"
+case "$TRIVY" in
+    *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
+esac
+HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":4,\"score\":\"${ACTIVE_COUNT}/4\"}"
 
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF
