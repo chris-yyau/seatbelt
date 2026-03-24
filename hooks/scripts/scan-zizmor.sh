@@ -87,6 +87,10 @@ except Exception:
             HITS=$(echo "$SCAN_OUTPUT" | grep -cE '(warning|error)\[' 2>/dev/null || echo "0")
             echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
             echo "$SCAN_OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
+            # Write result for summary aggregation (append: multiple workflows may have findings)
+            source "$LIB_DIR/result-dir.sh"
+            mkdir -p "$SEATBELT_RESULT_DIR"
+            echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
         elif [ -n "$SCAN_OUTPUT" ]; then
             # Non-empty output that is neither JSON nor text findings — likely a CLI error
             # (e.g. --format json unsupported). Emit a degraded warning rather than silently skip.
@@ -98,6 +102,10 @@ except Exception:
             if [ -n "$FINDING_SUMMARY" ]; then
                 printf '%s\n' "$FINDING_SUMMARY" >&2
             fi
+            # Write result for summary aggregation (append: multiple workflows may have findings)
+            source "$LIB_DIR/result-dir.sh"
+            mkdir -p "$SEATBELT_RESULT_DIR"
+            echo "${FINDING_COUNT} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
         fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)

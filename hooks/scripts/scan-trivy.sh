@@ -132,6 +132,10 @@ except Exception:
             if [ -n "$FINDING_SUMMARY" ]; then
                 printf '%s\n' "$FINDING_SUMMARY" >&2
             fi
+            # Write result for summary aggregation (append: multiple lockfiles may have findings)
+            source "$LIB_DIR/result-dir.sh"
+            mkdir -p "$SEATBELT_RESULT_DIR"
+            echo "${FINDING_COUNT} vulnerabilit$([ "$FINDING_COUNT" -eq 1 ] && echo 'y' || echo 'ies') in $(basename "$lf")" >> "$SEATBELT_RESULT_DIR/trivy"
         fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
