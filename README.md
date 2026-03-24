@@ -1,5 +1,9 @@
 # Seatbelt
 
+[![CI](https://github.com/chris-yyau/seatbelt/actions/workflows/tests.yml/badge.svg)](https://github.com/chris-yyau/seatbelt/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/chris-yyau/seatbelt/badge)](https://scorecard.dev/viewer/?uri=github.com/chris-yyau/seatbelt)
+
 Zero-config security scanning for vibe coders. Seatbelt is a [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) that automatically scans your staged changes before every `git commit`.
 
 ## What it does
@@ -68,6 +72,36 @@ All four scanner hooks share a common commit-detection library (`hooks/scripts/l
 
 If you use partial staging (`git add -p`), seatbelt scans exactly the hunks you staged.
 
+### Architecture
+
+```
+Claude Code                        Seatbelt Plugin
+───────────                        ───────────────
+
+  git commit ──► PreToolUse hooks fire (parallel)
+                    │
+                    ├─► scan-gitleaks.sh ──► gitleaks protect --staged
+                    │     └─► BLOCK on secrets found
+                    │
+                    ├─► scan-checkov.sh  ──► extract staged IaC ──► checkov
+                    │     └─► BLOCK on misconfigurations
+                    │
+                    ├─► scan-trivy.sh   ──► extract staged locks ──► trivy fs
+                    │     └─► WARN on CVEs (commit proceeds)
+                    │
+                    └─► scan-zizmor.sh  ──► extract staged workflows ──► zizmor
+                          └─► WARN on workflow issues (commit proceeds)
+
+                 PostToolUse hook fires
+                    │
+                    └─► scan-summary.sh ──► aggregate warn findings
+                          └─► "SEATBELT SUMMARY: 3 finding(s)..."
+
+  Shared library: hooks/scripts/lib/
+    ├── detect-commit.sh   (JSON parsing, commit detection)
+    └── result-dir.sh      (temp directory management)
+```
+
 ## How setup works
 
 `/seatbelt:setup` is a one-stop onboarding command that:
@@ -134,12 +168,89 @@ SEATBELT SUMMARY: 3 finding(s) from 2 scanner(s) — trivy: 2 vulnerabilities in
 
 This summary only appears when there are findings. If all scans are clean, no summary is shown.
 
+## Example output
+
+**Secret detected (commit blocked):**
+
+Gitleaks emits a JSON block decision. The `reason` field contains the truncated gitleaks output showing what was found:
+
+```json
+{"decision":"block","reason":"SECRET DETECTED in staged changes — commit blocked.\n\nGitleaks found potential secrets/credentials:\n\nFinding: ...AKIAIOSFODNN7EXAMPLE...\nRuleID: aws-access-key-id\nFile: src/config.js\nLine: 12\n\nFix: Remove the secret from staged files. Use environment variables or a secret manager.\nFalse positive? Add the fingerprint to .gitleaksignore\nBypass once: export SKIP_GITLEAKS=1 in your shell, then retry"}
+```
+
+**IaC misconfiguration (commit blocked):**
+
+Checkov also emits a JSON block decision with parsed check IDs in the reason:
+
+```json
+{"decision":"block","reason":"IaC MISCONFIGURATION in staged files — commit blocked.\n\ncheckov found failed checks:\n\n  CKV_DOCKER_3 on /Dockerfile (/Dockerfile)\n\nFix: Address the failed checks listed above.\nFalse positive? Add #checkov:skip=CKV_XXX:reason above the affected line\nBypass once: export SKIP_CHECKOV=1 in your shell, then retry"}
+```
+
+**Dependency CVEs (warning only, commit proceeds):**
+
+Trivy prints a summary to stderr — no block decision, commit proceeds:
+
+```text
+SEATBELT: trivy found 2 vulnerabilities in package-lock.json:
+  CVE-2021-23337 [CRITICAL] lodash 4.17.20; CVE-2021-44906 [HIGH] minimist 1.2.5
+```
+
+**All clean (no output):**
+
+When all scans pass with no findings, seatbelt produces no output — your commit proceeds silently.
+
+**Scanner not installed (degraded mode):**
+
+```text
+SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt doctor)
+```
+
+## Troubleshooting
+
+**python3 not found — scans silently skipped**
+
+Seatbelt uses `python3` to parse hook input JSON and detect git commit commands. Without it, the commit-detection library (`detect-commit.sh`) fails open — hooks silently skip scanning rather than blocking. Install it with `brew install python3` (macOS) or `apt-get install python3` (Linux).
+
+**trivy reports "no vulnerability DB cached"**
+
+Trivy needs its vulnerability database downloaded before it can scan. Run:
+```bash
+trivy image --download-db-only
+```
+
+**checkov is slow on first run**
+
+Checkov's first invocation downloads its Python dependencies. Subsequent runs are faster. If it's too slow, bypass it temporarily with `SKIP_CHECKOV=1`.
+
+**Scans don't run on my commits**
+
+Seatbelt only intercepts commits made through Claude Code's Bash tool. Commits made directly in your terminal (outside Claude Code) bypass the plugin hooks. This is by design — seatbelt is a Claude Code plugin, not a git hook.
+
+**False positive from gitleaks**
+
+Add the finding's fingerprint to a `.gitleaksignore` file in your repo root. Run `gitleaks protect --staged` manually to get the fingerprint, then add it to the ignore file.
+
+**I want to suppress a specific checkov rule**
+
+Add a comment above the affected line in your IaC file:
+```text
+#checkov:skip=CKV_DOCKER_3:We use a non-root user in the entrypoint script
+```
+
 ## Uninstall
 
 ```bash
 claude plugin uninstall seatbelt@seatbelt
 claude plugin marketplace remove seatbelt
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and how to add new scanners.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## License
 
