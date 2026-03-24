@@ -9,12 +9,12 @@ test_doctor_has_health_score() {
 import sys, json
 d = json.load(sys.stdin)
 h = d['health']
-assert 'installed' in h, 'missing installed'
+assert 'active' in h, 'missing active'
 assert 'total' in h, 'missing total'
 assert 'score' in h, 'missing score'
 assert h['total'] == 4, f'total should be 4, got {h[\"total\"]}'
-assert isinstance(h['installed'], int), 'installed not int'
-assert h['score'] == f\"{h['installed']}/4\", 'score format wrong'
+assert isinstance(h['active'], int), 'active not int'
+assert h['score'] == f\"{h['active']}/4\", 'score format wrong'
 " 2>/dev/null; then
         ERRORS="\n  doctor output missing or invalid 'health' field"
         fail "doctor has health score"
@@ -106,9 +106,9 @@ import sys, json, re
 d = json.load(sys.stdin)
 # Known-good prefixes for each tool when brew is absent
 expected = {
-    'gitleaks': ('apt-get', 'go install', 'https://'),
+    'gitleaks': ('go install', 'https://'),
     'checkov':  ('pip3', 'https://'),
-    'trivy':    ('curl', 'https://'),
+    'trivy':    ('apt-get', 'sudo apt-get', 'https://'),
     'zizmor':   ('pip3', 'cargo', 'https://'),
 }
 for tool, prefixes in expected.items():

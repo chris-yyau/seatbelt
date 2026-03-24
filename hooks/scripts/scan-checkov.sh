@@ -128,14 +128,15 @@ try:
     data = json.load(sys.stdin)
     # Handle both top-level dict (single file) and list (multi-file) shapes
     if isinstance(data, list):
-        results = {}
+        failed_checks = []
         for item in data:
             if isinstance(item, dict) and 'results' in item:
-                results = item.get('results', {})
-                break
+                fc = item.get('results', {}).get('failed_checks', [])
+                if isinstance(fc, list):
+                    failed_checks.extend(fc)
     else:
         results = data.get('results', {})
-    failed_checks = results.get('failed_checks', [])
+        failed_checks = results.get('failed_checks', [])
     if not isinstance(failed_checks, list):
         failed_checks = []
     count = len(failed_checks)

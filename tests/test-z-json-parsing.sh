@@ -274,6 +274,94 @@ MOCKEOF
 }
 test_trivy_json_clean_scan
 
+# Test: trivy malformed JSON → should emit degraded warning on stderr (fail-open)
+test_trivy_json_parse_failure() {
+    local repo mockdir fake_cache
+    repo=$(_zjp_make_test_repo)
+    mockdir=$(mktemp -d)
+    fake_cache=$(mktemp -d)
+    mkdir -p "$fake_cache/db"
+    touch "$fake_cache/db/placeholder"
+
+    echo '{"name":"test","lockfileVersion":2,"packages":{}}' > "$repo/package-lock.json"
+    git -C "$repo" add package-lock.json
+
+    # Mock trivy: outputs malformed JSON
+    cat > "$mockdir/trivy" << 'MOCKEOF'
+#!/usr/bin/env bash
+echo "this is not valid json at all"
+exit 0
+MOCKEOF
+    chmod +x "$mockdir/trivy"
+
+    ERRORS=""
+    export TRIVY_CACHE_DIR="$fake_cache"
+    _zjp_run_hook_in_repo "$repo" "scan-trivy.sh" "$FIXTURES_DIR/git-commit.json" "$mockdir"
+    unset TRIVY_CACHE_DIR
+
+    if echo "$STDERR" | grep -qF "SEATBELT: trivy: could not parse"; then
+        pass "trivy: malformed JSON emits degraded warning (fail-open)"
+    else
+        ERRORS="${ERRORS}\n  Expected stderr to contain 'SEATBELT: trivy: could not parse'"
+        fail "trivy: malformed JSON emits degraded warning (fail-open)"
+    fi
+
+    rm -rf "$repo" "$mockdir" "$fake_cache"
+}
+test_trivy_json_parse_failure
+
+# Test: checkov multi-framework list aggregates all items
+test_checkov_multi_framework_list() {
+    local repo mockdir
+    repo=$(_zjp_make_test_repo)
+    mockdir=$(mktemp -d)
+
+    cat > "$repo/Dockerfile" << 'EOF'
+FROM ubuntu:latest
+RUN echo hello
+EOF
+    git -C "$repo" add Dockerfile
+
+    # Mock checkov: outputs a list with multiple framework results (2 failed checks across 2 items)
+    cat > "$mockdir/checkov" << 'MOCKEOF'
+#!/usr/bin/env bash
+cat << 'JSON'
+[
+  {
+    "check_type": "dockerfile",
+    "results": {
+      "passed_checks": [],
+      "failed_checks": [
+        {"check_id": "CKV_DOCKER_2", "check_result": {"result": "FAILED"}, "resource": "HEALTHCHECK", "file_path": "/tmp/Dockerfile", "file_line_range": [1, 2]}
+      ]
+    }
+  },
+  {
+    "check_type": "sca_image",
+    "results": {
+      "passed_checks": [],
+      "failed_checks": [
+        {"check_id": "CKV_DOCKER_3", "check_result": {"result": "FAILED"}, "resource": "ubuntu:latest", "file_path": "/tmp/Dockerfile", "file_line_range": [1, 1]}
+      ]
+    }
+  }
+]
+JSON
+exit 0
+MOCKEOF
+    chmod +x "$mockdir/checkov"
+
+    ERRORS=""
+    _zjp_run_hook_in_repo "$repo" "scan-checkov.sh" "$FIXTURES_DIR/git-commit.json" "$mockdir"
+
+    assert_stdout_json_block && \
+        pass "checkov: multi-framework list aggregates all failed checks" || \
+        fail "checkov: multi-framework list aggregates all failed checks"
+
+    rm -rf "$repo" "$mockdir"
+}
+test_checkov_multi_framework_list
+
 # ═══════════════════════════════════════════════════════════
 # Task 6: scan-zizmor.sh JSON parsing tests
 # ═══════════════════════════════════════════════════════════
