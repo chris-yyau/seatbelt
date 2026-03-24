@@ -28,6 +28,25 @@ get_version() {
     esac
 }
 
+# ── Helper: check if trivy DB is cached ──────────────────────────────
+check_trivy_db() {
+    local db_dir=""
+
+    if [ -n "${TRIVY_CACHE_DIR:-}" ]; then
+        db_dir="${TRIVY_CACHE_DIR}/db"
+    elif [ "$(uname -s)" = "Darwin" ]; then
+        db_dir="${HOME}/Library/Caches/trivy/db"
+    else
+        db_dir="${HOME}/.cache/trivy/db"
+    fi
+
+    if [ -d "$db_dir" ] && [ -n "$(ls -A "$db_dir" 2>/dev/null)" ]; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
 # ── Helper: check tool and get version ──────────────────────────────
 check_tool() {
     local name="$1"
@@ -50,10 +69,21 @@ check_tool() {
         fi
     fi
 
-    printf '{"installed":%s,"version":%s,"path":%s}' \
-        "$installed" \
-        "$(json_str "$version")" \
-        "$(json_str "$path")"
+    # Trivy gets an extra db_cached field
+    if [ "$name" = "trivy" ]; then
+        local db_cached
+        db_cached=$(check_trivy_db)
+        printf '{"installed":%s,"version":%s,"path":%s,"db_cached":%s}' \
+            "$installed" \
+            "$(json_str "$version")" \
+            "$(json_str "$path")" \
+            "$db_cached"
+    else
+        printf '{"installed":%s,"version":%s,"path":%s}' \
+            "$installed" \
+            "$(json_str "$version")" \
+            "$(json_str "$path")"
+    fi
 }
 
 # ── Detect platform ────────────────────────────────────────────────
