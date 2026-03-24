@@ -125,3 +125,30 @@ for tool, prefixes in expected.items():
     pass "doctor install_cmd selection"
 }
 test_doctor_install_cmd_selection
+
+# ── Health score is computed correctly (regression: field-order independence) ──
+test_doctor_health_score_correct() {
+    STDOUT=$(bash "$DOCTOR_SCRIPT" 2>/dev/null)
+    ERRORS=""
+    if ! echo "$STDOUT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+h = d['health']
+# Recompute expected active count from scanner entries
+expected = 0
+for tool in ['gitleaks', 'checkov', 'zizmor']:
+    if d[tool].get('installed', False):
+        expected += 1
+trivy = d['trivy']
+if trivy.get('installed', False) and trivy.get('db_cached', False):
+    expected += 1
+assert h['active'] == expected, f'health active={h[\"active\"]} but computed={expected}'
+assert h['score'] == f'{expected}/4', f'score mismatch'
+" 2>/dev/null; then
+        ERRORS="\n  health score does not match recomputed value"
+        fail "doctor health score correct"
+        return
+    fi
+    pass "doctor health score correct"
+}
+test_doctor_health_score_correct

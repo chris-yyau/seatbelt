@@ -180,15 +180,32 @@ ZIZMOR=$(check_tool "zizmor")
 # ── Compute health score ─────────────────────────────────────────────
 # Trivy is "active" only when installed AND db_cached is true.
 # All other scanners are active when installed.
-ACTIVE_COUNT=0
-for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR"; do
-    case "$check_var" in
-        *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
+# Prefer python3 (field-order independent); fall back to glob patterns.
+if command -v python3 &>/dev/null; then
+    ACTIVE_COUNT=$(python3 -c "
+import sys, json
+scanners = json.loads(sys.argv[1])
+active = 0
+for name in ['gitleaks', 'checkov', 'zizmor']:
+    if scanners[name].get('installed', False):
+        active += 1
+trivy = scanners['trivy']
+if trivy.get('installed', False) and trivy.get('db_cached', False):
+    active += 1
+print(active)
+" "{\"gitleaks\":${GITLEAKS},\"checkov\":${CHECKOV},\"trivy\":${TRIVY},\"zizmor\":${ZIZMOR}}" 2>/dev/null || echo "0")
+else
+    # Fallback: glob patterns (order-dependent but works without python3)
+    ACTIVE_COUNT=0
+    for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR"; do
+        case "$check_var" in
+            *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
+        esac
+    done
+    case "$TRIVY" in
+        *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
     esac
-done
-case "$TRIVY" in
-    *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
-esac
+fi
 HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":4,\"score\":\"${ACTIVE_COUNT}/4\"}"
 
 # ── Output JSON ─────────────────────────────────────────────────────
