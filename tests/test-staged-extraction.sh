@@ -161,7 +161,9 @@ run_trivy_staged_test() {
 
     local stub
     stub=$(make_stub_scanner "trivy")
-    TRIVY_CACHE_DIR="$fake_cache" run_hook_in_repo "$repo" "scan-trivy.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+    export TRIVY_CACHE_DIR="$fake_cache"
+    run_hook_in_repo "$repo" "scan-trivy.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+    unset TRIVY_CACHE_DIR
 
     if [ -f "$stub.log" ] && grep -q "STUB_CALLED" "$stub.log"; then
         if grep -q "bad-pkg" "$stub.log" && ! grep -q "good-pkg" "$stub.log"; then

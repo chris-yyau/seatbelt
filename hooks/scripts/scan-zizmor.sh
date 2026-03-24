@@ -79,7 +79,7 @@ while IFS= read -r -d '' wf; do
     esac
 
     local_mode=$(git ls-files -s -- "$wf" 2>/dev/null | cut -d' ' -f1)
-    [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ] && continue
+    if [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ]; then continue; fi
 
     EXPECTED=$((EXPECTED + 1))
     mkdir -p "$SCAN_DIR/$(dirname "$wf")" 2>/dev/null || continue

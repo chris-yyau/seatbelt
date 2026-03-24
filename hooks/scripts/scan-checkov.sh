@@ -112,7 +112,7 @@ while IFS= read -r -d '' staged_file; do
 
     # Skip symlinks (mode 120000) and submodules (mode 160000)
     local_mode=$(git ls-files -s -- "$staged_file" 2>/dev/null | cut -d' ' -f1)
-    [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ] && continue
+    if [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ]; then continue; fi
 
     EXPECTED=$((EXPECTED + 1))
     mkdir -p "$SCAN_DIR/$(dirname "$staged_file")" 2>/dev/null || continue

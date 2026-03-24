@@ -65,8 +65,14 @@ if ! command -v trivy &>/dev/null; then
 fi
 
 # ── Early exit: no lock files staged ──────────────────────────────
-HAS_LOCKFILES=$(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null | tr '\0' '\n' | grep -cE '(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|requirements\.txt|poetry\.lock|uv\.lock|Pipfile\.lock|go\.sum|Gemfile\.lock|composer\.lock)$' 2>/dev/null || true)
-[ "${HAS_LOCKFILES:-0}" -eq 0 ] && exit 0
+HAS_LOCKFILES=0
+while IFS= read -r -d '' path; do
+    case "$path" in
+        *package-lock.json|*yarn.lock|*pnpm-lock.yaml|*Cargo.lock|*requirements.txt|*poetry.lock|*uv.lock|*Pipfile.lock|*go.sum|*Gemfile.lock|*composer.lock)
+            HAS_LOCKFILES=1; break ;;
+    esac
+done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
+[ "$HAS_LOCKFILES" -eq 0 ] && exit 0
 
 # ── Extract staged lock files to temp dir ─────────────────────────
 SCAN_DIR=$(mktemp -d)
@@ -111,7 +117,7 @@ while IFS= read -r -d '' lf; do
     esac
 
     local_mode=$(git ls-files -s -- "$lf" 2>/dev/null | cut -d' ' -f1)
-    [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ] && continue
+    if [ "$local_mode" = "120000" ] || [ "$local_mode" = "160000" ]; then continue; fi
 
     EXPECTED=$((EXPECTED + 1))
     mkdir -p "$SCAN_DIR/$(dirname "$lf")" 2>/dev/null || continue
