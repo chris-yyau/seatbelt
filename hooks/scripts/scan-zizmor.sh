@@ -11,8 +11,10 @@ trap 'exit 0' ERR  # fail-open on script errors
 [ "${SKIP_ZIZMOR:-0}" = "1" ] && exit 0
 
 # ── Detect git commit via shared library ─────────────────────────
+# shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
+# shellcheck disable=SC1091
 source "$LIB_DIR/detect-commit.sh"
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
@@ -88,6 +90,7 @@ except Exception:
             echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
             echo "$SCAN_OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
             # Write result for summary aggregation (append: multiple workflows may have findings)
+            # shellcheck disable=SC1091
             source "$LIB_DIR/result-dir.sh"
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
@@ -103,6 +106,7 @@ except Exception:
                 printf '%s\n' "$FINDING_SUMMARY" >&2
             fi
             # Write result for summary aggregation (append: multiple workflows may have findings)
+            # shellcheck disable=SC1091
             source "$LIB_DIR/result-dir.sh"
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${FINDING_COUNT} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"

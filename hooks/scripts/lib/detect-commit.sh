@@ -20,6 +20,7 @@ if ! command -v python3 &>/dev/null; then
     return 0  # fail-open without python3
 fi
 
+# shellcheck disable=SC2034  # IS_GIT_COMMIT is consumed by the sourcing script
 IS_GIT_COMMIT=$(printf '%s' "$HOOK_DATA" | python3 -c "
 import sys, json, re, shlex
 try:

@@ -23,8 +23,10 @@ block_emit() {
 [ "${SKIP_CHECKOV:-0}" = "1" ] && exit 0
 
 # ── Detect git commit via shared library ─────────────────────────
+# shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
+# shellcheck disable=SC1091
 source "$LIB_DIR/detect-commit.sh"
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0

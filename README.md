@@ -128,7 +128,7 @@ Checks which scanners are installed, reports versions, shows a health score (`N/
 
 After scanning, seatbelt shows an aggregate summary of findings from warn-only scanners:
 
-```
+```text
 SEATBELT SUMMARY: 3 finding(s) from 2 scanner(s) — trivy: 2 vulnerabilities in package-lock.json; zizmor: 1 issue in ci.yml
 ```
 

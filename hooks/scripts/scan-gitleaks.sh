@@ -23,13 +23,20 @@ block_emit() {
 [ "${SKIP_GITLEAKS:-0}" = "1" ] && exit 0
 
 # ── Detect git commit via shared library ─────────────────────────
+# shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
+# shellcheck disable=SC1091  # dynamically resolved path
 source "$LIB_DIR/detect-commit.sh"
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 
 # Not in a git repo → skip
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
+
+# ── Clean stale scan results from previous blocked commits ────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/result-dir.sh"
+rm -rf "$SEATBELT_RESULT_DIR"
 
 # ── gitleaks availability ───────────────────────────────────────────
 if ! command -v gitleaks &>/dev/null; then

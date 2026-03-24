@@ -4,19 +4,24 @@
 # Skip: SKIP_SEATBELT=1
 
 set -euo pipefail
-trap 'exit 0' ERR
 
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 
 # ── Detect git commit via shared library ─────────────────────
+# shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh
 HOOK_DATA=$(cat 2>/dev/null || true)
 LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
+# shellcheck disable=SC1091
 source "$LIB_DIR/detect-commit.sh"
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 
 # ── Compute result directory (repo-specific to avoid cross-repo collisions) ──
+# shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
 [ ! -d "$SEATBELT_RESULT_DIR" ] && exit 0
+
+# ── Always clean up result dir (even on error) ──────────────
+trap 'rm -rf "$SEATBELT_RESULT_DIR"' EXIT
 
 # Sum findings across all result files (each file may have multiple lines
 # from scanning multiple lockfiles/workflows — one line per scanned file)
@@ -31,7 +36,7 @@ for result_file in "$SEATBELT_RESULT_DIR"/*; do
 
     while IFS= read -r line; do
         [ -z "$line" ] && continue
-        line_count=$(echo "$line" | grep -oE '^[0-9]+' | head -1)
+        line_count=$(echo "$line" | grep -oE '^[0-9]+' | head -1 || true)
         line_count=${line_count:-0}
         if [ "$line_count" -gt 0 ] 2>/dev/null; then
             scanner_total=$((scanner_total + line_count))
@@ -50,7 +55,5 @@ if [ "$SCANNER_COUNT" -gt 0 ]; then
     echo "SEATBELT SUMMARY: ${TOTAL_FINDINGS} finding(s) from ${SCANNER_COUNT} scanner(s) — ${SUMMARY_PARTS%%; }" >&2
 fi
 
-# ── Cleanup ──────────────────────────────────────────────────
-rm -rf "$SEATBELT_RESULT_DIR"
-
+# Cleanup handled by EXIT trap
 exit 0
