@@ -47,6 +47,65 @@ check_trivy_db() {
     fi
 }
 
+# ── Helper: get recommended install command ───────────────────────────
+get_install_cmd() {
+    local name="$1"
+    local has_brew="false"
+    local has_pip3="false"
+    local has_cargo="false"
+    local has_apt="false"
+    local has_go="false"
+
+    if echo "$PMS_RAW" | grep -qw "brew";    then has_brew="true";  fi
+    if echo "$PMS_RAW" | grep -qw "pip3";    then has_pip3="true";  fi
+    if echo "$PMS_RAW" | grep -qw "cargo";   then has_cargo="true"; fi
+    if echo "$PMS_RAW" | grep -qw "apt-get"; then has_apt="true";   fi
+    if echo "$PMS_RAW" | grep -qw "go";      then has_go="true";    fi
+
+    case "$name" in
+        gitleaks)
+            if [ "$has_brew" = "true" ]; then
+                echo "brew install gitleaks"
+            elif [ "$has_apt" = "true" ]; then
+                echo "apt-get install gitleaks"
+            elif [ "$has_go" = "true" ]; then
+                echo "go install github.com/gitleaks/gitleaks/v8@latest"
+            else
+                echo "https://github.com/gitleaks/gitleaks/releases"
+            fi
+            ;;
+        checkov)
+            if [ "$has_pip3" = "true" ]; then
+                echo "pip3 install checkov"
+            elif [ "$has_brew" = "true" ]; then
+                echo "brew install checkov"
+            else
+                echo "https://www.checkov.io/2.Basics/Installing%20Checkov.html"
+            fi
+            ;;
+        trivy)
+            if [ "$has_brew" = "true" ]; then
+                echo "brew install trivy"
+            elif [ "$has_apt" = "true" ]; then
+                echo "curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin"
+            else
+                echo "https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
+            fi
+            ;;
+        zizmor)
+            if [ "$has_pip3" = "true" ]; then
+                echo "pip3 install zizmor"
+            elif [ "$has_cargo" = "true" ]; then
+                echo "cargo install zizmor"
+            elif [ "$has_brew" = "true" ]; then
+                echo "brew install zizmor"
+            else
+                echo "https://woodruffw.github.io/zizmor/installation/"
+            fi
+            ;;
+    esac
+}
+
 # ── Helper: check tool and get version ──────────────────────────────
 check_tool() {
     local name="$1"
@@ -69,27 +128,43 @@ check_tool() {
         fi
     fi
 
+    # Compute install_cmd (null when installed, command string when missing)
+    local install_cmd="null"
+    if [ "$installed" = "false" ]; then
+        install_cmd="$(json_str "$(get_install_cmd "$name")")"
+    fi
+
     # Trivy gets an extra db_cached field
     if [ "$name" = "trivy" ]; then
         local db_cached
         db_cached=$(check_trivy_db)
-        printf '{"installed":%s,"version":%s,"path":%s,"db_cached":%s}' \
+        printf '{"installed":%s,"version":%s,"path":%s,"db_cached":%s,"install_cmd":%s}' \
             "$installed" \
             "$(json_str "$version")" \
             "$(json_str "$path")" \
-            "$db_cached"
+            "$db_cached" \
+            "$install_cmd"
     else
-        printf '{"installed":%s,"version":%s,"path":%s}' \
+        printf '{"installed":%s,"version":%s,"path":%s,"install_cmd":%s}' \
             "$installed" \
             "$(json_str "$version")" \
-            "$(json_str "$path")"
+            "$(json_str "$path")" \
+            "$install_cmd"
     fi
 }
 
 # ── Detect platform ────────────────────────────────────────────────
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
 
-# ── Detect package managers ─────────────────────────────────────────
+# ── Detect package managers (raw list for get_install_cmd) ───────────
+PMS_RAW=""
+for pm in brew pip3 cargo apt-get go; do
+    if command -v "$pm" &>/dev/null; then
+        PMS_RAW="$PMS_RAW $pm"
+    fi
+done
+
+# ── Build package managers JSON array ────────────────────────────────
 PMS=""
 for pm in brew pip3 cargo apt-get go; do
     if command -v "$pm" &>/dev/null; then

@@ -42,3 +42,86 @@ assert isinstance(trivy['db_cached'], bool), 'db_cached not bool'
     pass "doctor trivy db_cached"
 }
 test_doctor_trivy_db_cached
+
+# ── install_cmd field per scanner ───────────────────────────────────
+test_doctor_has_install_cmd() {
+    STDOUT=$(bash "$DOCTOR_SCRIPT" 2>/dev/null)
+    ERRORS=""
+    if ! echo "$STDOUT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor']:
+    entry = d[tool]
+    assert 'install_cmd' in entry, f'{tool} missing install_cmd'
+    if entry['installed']:
+        assert entry['install_cmd'] is None, f'{tool} installed but install_cmd not null'
+" 2>/dev/null; then
+        ERRORS="\n  scanner entries missing or invalid 'install_cmd' field"
+        fail "doctor has install_cmd"
+        return
+    fi
+    pass "doctor has install_cmd"
+}
+test_doctor_has_install_cmd
+
+test_doctor_install_cmd_priority() {
+    STDOUT=$(bash "$DOCTOR_SCRIPT" 2>/dev/null)
+    ERRORS=""
+    if ! echo "$STDOUT" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor']:
+    entry = d[tool]
+    if not entry['installed']:
+        assert entry['install_cmd'] is not None, f'{tool} not installed but no install_cmd'
+        assert isinstance(entry['install_cmd'], str), f'{tool} install_cmd not string'
+        assert len(entry['install_cmd']) > 0, f'{tool} install_cmd is empty'
+" 2>/dev/null; then
+        ERRORS="\n  install_cmd not provided for missing tools"
+        fail "doctor install_cmd priority"
+        return
+    fi
+    pass "doctor install_cmd priority"
+}
+test_doctor_install_cmd_priority
+
+# ── install_cmd selection logic (brew-free environment) ─────────────
+# Verifies that each tool produces a recognized install command when
+# run without brew — exercises the package manager priority table.
+test_doctor_install_cmd_selection() {
+    local tmpbin
+    tmpbin=$(make_degraded_path)
+    # Add pip3, cargo, go, apt-get but NOT brew to exercise fallback paths
+    for cmd in pip3 cargo go apt-get; do
+        local p
+        p=$(command -v "$cmd" 2>/dev/null || true)
+        [ -n "$p" ] && ln -sf "$p" "$tmpbin/$cmd"
+    done
+
+    STDOUT=$(PATH="$tmpbin" bash "$DOCTOR_SCRIPT" 2>/dev/null)
+    rm -rf "$tmpbin"
+    ERRORS=""
+    if ! echo "$STDOUT" | python3 -c "
+import sys, json, re
+d = json.load(sys.stdin)
+# Known-good prefixes for each tool when brew is absent
+expected = {
+    'gitleaks': ('apt-get', 'go install', 'https://'),
+    'checkov':  ('pip3', 'https://'),
+    'trivy':    ('curl', 'https://'),
+    'zizmor':   ('pip3', 'cargo', 'https://'),
+}
+for tool, prefixes in expected.items():
+    cmd = d[tool].get('install_cmd')
+    if cmd is None:
+        continue  # tool is installed; skip
+    assert any(cmd.startswith(p) for p in prefixes), \
+        f'{tool} install_cmd {cmd!r} does not start with any of {prefixes}'
+" 2>/dev/null; then
+        ERRORS="\n  install_cmd selection returned unexpected command for one or more tools"
+        fail "doctor install_cmd selection"
+        return
+    fi
+    pass "doctor install_cmd selection"
+}
+test_doctor_install_cmd_selection
