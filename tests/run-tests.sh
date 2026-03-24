@@ -106,7 +106,7 @@ fail() {
 make_degraded_path() {
     local tmpbin
     tmpbin=$(mktemp -d)
-    for cmd in bash python3 git uname cat grep sed head printf tr ls mkdir rm mktemp sort; do
+    for cmd in bash python3 git uname cat grep sed head printf tr ls mkdir rm mktemp sort dirname cut command; do
         local p
         p=$(command -v "$cmd" 2>/dev/null || true)
         [ -n "$p" ] && ln -sf "$p" "$tmpbin/$cmd"

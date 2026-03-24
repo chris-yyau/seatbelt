@@ -10,53 +10,25 @@ trap 'exit 0' ERR  # fail-open on script errors
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 [ "${SKIP_ZIZMOR:-0}" = "1" ] && exit 0
 
-# ── Consume stdin ───────────────────────────────────────────────────
+# ── Detect git commit via shared library ─────────────────────────
+# shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh
 HOOK_DATA=$(cat 2>/dev/null || true)
-[ -z "$HOOK_DATA" ] && exit 0
-
-# ── Fast pre-filter ─────────────────────────────────────────────────
-case "$HOOK_DATA" in
-    *\"Bash\"*git\ commit*) ;;
-    *git\ commit*\"Bash\"*) ;;
-    *) exit 0 ;;
-esac
-
-# ── python3 JSON parsing ───────────────────────────────────────────
-if ! command -v python3 &>/dev/null; then
+LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
+# shellcheck disable=SC1091
+if ! source "$LIB_DIR/detect-commit.sh"; then
+    echo "SEATBELT DEGRADED: zizmor commit detection unavailable — zizmor scan skipped" >&2
     exit 0
 fi
-
-IS_GIT_COMMIT=$(printf '%s' "$HOOK_DATA" | python3 -c "
-import sys, json, re, shlex
-try:
-    d = json.load(sys.stdin)
-    tool = d.get('tool_name', d.get('toolName', ''))
-    if tool != 'Bash':
-        sys.exit(0)
-    inp = d.get('tool_input', d.get('toolInput', {}))
-    if isinstance(inp, str):
-        inp = json.loads(inp)
-    cmd = inp.get('command', '')
-    for seg in re.split(r'&&|\|\||[;\n|]', cmd):
-        seg = seg.strip()
-        if not seg:
-            continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            tokens = shlex.split(seg, posix=False)
-        # Skip leading KEY=VALUE tokens
-        while tokens and re.match(r'^\w+=', tokens[0]):
-            tokens = tokens[1:]
-        if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
-            print('yes')
-            break
-except Exception:
-    pass
-" 2>/dev/null || true)
-
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
+
+# ── Clean stale results from a previous blocked commit ───────────
+# PreToolUse scanners write results, but if a blocking scanner prevents the
+# commit, the PostToolUse summary hook never fires and stale files persist.
+# Clean unconditionally on every commit attempt, before any early exits.
+# shellcheck disable=SC1091
+source "$LIB_DIR/result-dir.sh"
+rm -f "$SEATBELT_RESULT_DIR/zizmor"
 
 # ── zizmor availability ─────────────────────────────────────────────
 if ! command -v zizmor &>/dev/null; then
@@ -128,6 +100,9 @@ except Exception:
             HITS=$(echo "$SCAN_OUTPUT" | grep -cE '(warning|error)\[' 2>/dev/null || echo "0")
             echo "SEATBELT: zizmor found ${HITS} issue(s) in $(basename "$wf"):" >&2
             echo "$SCAN_OUTPUT" | grep -E '(warning|error)\[' | head -3 >&2
+            # Write result for summary aggregation (append: multiple workflows may have findings)
+            mkdir -p "$SEATBELT_RESULT_DIR"
+            echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
         elif [ -n "$SCAN_OUTPUT" ]; then
             # Non-empty output that is neither JSON nor text findings — likely a CLI error
             # (e.g. --format json unsupported). Emit a degraded warning rather than silently skip.
@@ -139,6 +114,9 @@ except Exception:
             if [ -n "$FINDING_SUMMARY" ]; then
                 printf '%s\n' "$FINDING_SUMMARY" >&2
             fi
+            # Write result for summary aggregation (append: multiple workflows may have findings)
+            mkdir -p "$SEATBELT_RESULT_DIR"
+            echo "${FINDING_COUNT} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
         fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)

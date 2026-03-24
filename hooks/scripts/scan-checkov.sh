@@ -22,51 +22,15 @@ block_emit() {
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 [ "${SKIP_CHECKOV:-0}" = "1" ] && exit 0
 
-# ── Consume stdin ───────────────────────────────────────────────────
+# ── Detect git commit via shared library ─────────────────────────
+# shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh
 HOOK_DATA=$(cat 2>/dev/null || true)
-[ -z "$HOOK_DATA" ] && exit 0
-
-# ── Fast pre-filter ─────────────────────────────────────────────────
-case "$HOOK_DATA" in
-    *\"Bash\"*git\ commit*) ;;
-    *git\ commit*\"Bash\"*) ;;
-    *) exit 0 ;;
-esac
-
-# ── python3 JSON parsing ───────────────────────────────────────────
-if ! command -v python3 &>/dev/null; then
+LIB_DIR="$(cd "$(dirname "$0")" && pwd)/lib"
+# shellcheck disable=SC1091
+if ! source "$LIB_DIR/detect-commit.sh"; then
+    echo "SEATBELT DEGRADED: checkov commit detection unavailable — checkov scan skipped" >&2
     exit 0
 fi
-
-IS_GIT_COMMIT=$(printf '%s' "$HOOK_DATA" | python3 -c "
-import sys, json, re, shlex
-try:
-    d = json.load(sys.stdin)
-    tool = d.get('tool_name', d.get('toolName', ''))
-    if tool != 'Bash':
-        sys.exit(0)
-    inp = d.get('tool_input', d.get('toolInput', {}))
-    if isinstance(inp, str):
-        inp = json.loads(inp)
-    cmd = inp.get('command', '')
-    for seg in re.split(r'&&|\|\||[;\n|]', cmd):
-        seg = seg.strip()
-        if not seg:
-            continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            tokens = shlex.split(seg, posix=False)
-        # Skip leading KEY=VALUE tokens
-        while tokens and re.match(r'^\w+=', tokens[0]):
-            tokens = tokens[1:]
-        if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
-            print('yes')
-            break
-except Exception:
-    pass
-" 2>/dev/null || true)
-
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 

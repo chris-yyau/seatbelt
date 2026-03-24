@@ -53,13 +53,11 @@ get_install_cmd() {
     local has_brew="false"
     local has_pip3="false"
     local has_cargo="false"
-    local has_apt="false"
     local has_go="false"
 
     if echo "$PMS_RAW" | grep -qw "brew";    then has_brew="true";  fi
     if echo "$PMS_RAW" | grep -qw "pip3";    then has_pip3="true";  fi
     if echo "$PMS_RAW" | grep -qw "cargo";   then has_cargo="true"; fi
-    if echo "$PMS_RAW" | grep -qw "apt-get"; then has_apt="true";   fi
     if echo "$PMS_RAW" | grep -qw "go";      then has_go="true";    fi
 
     case "$name" in
@@ -84,8 +82,6 @@ get_install_cmd() {
         trivy)
             if [ "$has_brew" = "true" ]; then
                 echo "brew install trivy"
-            elif [ "$has_apt" = "true" ]; then
-                echo "sudo apt-get install -y trivy"
             else
                 echo "https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
             fi
@@ -182,15 +178,32 @@ ZIZMOR=$(check_tool "zizmor")
 # ── Compute health score ─────────────────────────────────────────────
 # Trivy is "active" only when installed AND db_cached is true.
 # All other scanners are active when installed.
-ACTIVE_COUNT=0
-for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR"; do
-    case "$check_var" in
-        *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
+# Prefer python3 (field-order independent); fall back to glob patterns.
+if command -v python3 &>/dev/null; then
+    ACTIVE_COUNT=$(python3 -c "
+import sys, json
+scanners = json.loads(sys.argv[1])
+active = 0
+for name in ['gitleaks', 'checkov', 'zizmor']:
+    if scanners[name].get('installed', False):
+        active += 1
+trivy = scanners['trivy']
+if trivy.get('installed', False) and trivy.get('db_cached', False):
+    active += 1
+print(active)
+" "{\"gitleaks\":${GITLEAKS},\"checkov\":${CHECKOV},\"trivy\":${TRIVY},\"zizmor\":${ZIZMOR}}" 2>/dev/null || echo "0")
+else
+    # Fallback: glob patterns (order-dependent but works without python3)
+    ACTIVE_COUNT=0
+    for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR"; do
+        case "$check_var" in
+            *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
+        esac
+    done
+    case "$TRIVY" in
+        *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
     esac
-done
-case "$TRIVY" in
-    *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
-esac
+fi
 HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":4,\"score\":\"${ACTIVE_COUNT}/4\"}"
 
 # ── Output JSON ─────────────────────────────────────────────────────
