@@ -296,20 +296,35 @@ jobs:
 EOF
     git -C "$repo" add .github/workflows/ci.yml
 
-    # Mock zizmor: outputs JSON array with 1 finding
+    # Mock zizmor: outputs JSON array with 1 finding (real v1 schema)
     cat > "$mockdir/zizmor" << 'MOCKEOF'
 #!/usr/bin/env bash
 cat << 'JSON'
 [
   {
-    "rule": "unpinned-uses",
-    "severity": "medium",
-    "location": {
-      "file": ".github/workflows/ci.yml",
-      "line": 8,
-      "column": 9
+    "ident": "unpinned-uses",
+    "desc": "unpinned action reference",
+    "url": "https://docs.zizmor.sh/audits/#unpinned-uses",
+    "determinations": {
+      "confidence": "High",
+      "severity": "Medium",
+      "persona": "Regular"
     },
-    "message": "unpinned action reference"
+    "locations": [
+      {
+        "symbolic": {
+          "key": {
+            "Local": {
+              "prefix": null,
+              "given_path": ".github/workflows/ci.yml"
+            }
+          },
+          "annotation": "uses unpinned action",
+          "kind": "Primary"
+        }
+      }
+    ],
+    "ignored": false
   }
 ]
 JSON
