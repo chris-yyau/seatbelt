@@ -50,7 +50,7 @@ brew install gitleaks checkov trivy zizmor
 brew install gitleaks checkov trivy zizmor
 # Or without brew:
 #   gitleaks: https://github.com/gitleaks/gitleaks/releases
-#   trivy:    https://github.com/aquasecurity/trivy/releases
+#   trivy:    https://aquasecurity.github.io/trivy/latest/getting-started/installation/
 #   checkov:  pip3 install checkov
 #   zizmor:   pip3 install zizmor (or cargo install zizmor)
 ```
@@ -63,6 +63,8 @@ When a `git commit` is detected, seatbelt uses two approaches to scan staged con
 
 - **gitleaks** reads the git staging area directly via its `--staged` flag
 - **checkov, trivy, zizmor** extract staged file content to a temp directory via `git show`, then scan the extracted files. This ensures scanners see exactly what will be committed, not the current working tree.
+
+All four scanner hooks share a common commit-detection library (`hooks/scripts/lib/detect-commit.sh`) that parses Claude Code's hook input JSON to determine if the command is a `git commit`. Non-commit commands are ignored with near-zero overhead.
 
 If you use partial staging (`git add -p`), seatbelt scans exactly the hunks you staged.
 
@@ -121,6 +123,16 @@ Checks which scanners are installed, reports versions, shows a health score (`N/
 | checkov | Dockerfile, *.tf, *.tf.json, docker-compose.yml, .github/workflows/*.yml, k8s/*.yml, helm/*.yml |
 | trivy | package-lock.json, yarn.lock, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, Pipfile.lock, go.sum, Gemfile.lock, composer.lock |
 | zizmor | .github/workflows/*.yml, .github/workflows/*.yaml |
+
+## Scan summary
+
+After scanning, seatbelt shows an aggregate summary of findings from warn-only scanners:
+
+```
+SEATBELT SUMMARY: 3 finding(s) from 2 scanner(s) — trivy: 2 vulnerabilities in package-lock.json; zizmor: 1 issue in ci.yml
+```
+
+This summary only appears when there are findings. If all scans are clean, no summary is shown.
 
 ## Uninstall
 
