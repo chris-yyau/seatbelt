@@ -52,14 +52,12 @@ brew install gitleaks checkov trivy zizmor
 
 Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) on the Bash tool. Each hook checks if the command is a `git commit` and exits immediately if not — non-commit commands have near-zero overhead.
 
-When a `git commit` is detected:
+When a `git commit` is detected, seatbelt uses two approaches to scan staged content:
 
-- **gitleaks** scans the staged diff for secrets
-- **checkov** scans IaC files that appear in the staged file list (Dockerfiles, Terraform, k8s manifests, etc.)
-- **trivy** scans lock files that appear in the staged file list for known CVEs
-- **zizmor** scans workflow files that appear in the staged file list
+- **gitleaks** reads the git staging area directly via its `--staged` flag
+- **checkov, trivy, zizmor** extract staged file content to a temp directory via `git show`, then scan the extracted files. This ensures scanners see exactly what will be committed, not the current working tree.
 
-Note: gitleaks scans the actual staged diff. The other three scan the on-disk copy of files identified in the staging area.
+If you use partial staging (`git add -p`), seatbelt scans exactly the hunks you staged.
 
 ## Skip / bypass
 
