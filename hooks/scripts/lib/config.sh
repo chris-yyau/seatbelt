@@ -34,7 +34,7 @@ try:
         cfg = {"scanners": {}}
         with open(cfg_path) as f:
             content = f.read()
-        for name in ["gitleaks", "checkov", "trivy", "zizmor", "semgrep"]:
+        for name in ["gitleaks", "checkov", "trivy", "zizmor", "semgrep", "shellcheck", "commitlint", "signing"]:
             match = re.search(r"(?m)^\s*" + name + r":\s*\n\s+enabled:\s*(true|false)", content)
             if match:
                 cfg.setdefault("scanners", {})[name] = {"enabled": match.group(1) == "true"}
@@ -42,7 +42,7 @@ try:
         cfg = {}
     scanners = cfg.get("scanners", {}) or {}
     # ONLY output vars for scanners explicitly in the YAML (preserves env var precedence)
-    for name in ["gitleaks", "checkov", "trivy", "zizmor", "semgrep"]:
+    for name in ["gitleaks", "checkov", "trivy", "zizmor", "semgrep", "shellcheck", "commitlint", "signing"]:
         if name in scanners and "enabled" in (scanners.get(name) or {}):
             val = "true" if scanners[name]["enabled"] else "false"
             print("_SEATBELT_CFG_" + name.upper() + "_ENABLED=" + val)
@@ -60,8 +60,12 @@ SEATBELT_CHECKOV_ENABLED="${SEATBELT_CHECKOV_ENABLED:-${_SEATBELT_CFG_CHECKOV_EN
 SEATBELT_TRIVY_ENABLED="${SEATBELT_TRIVY_ENABLED:-${_SEATBELT_CFG_TRIVY_ENABLED:-true}}"
 SEATBELT_ZIZMOR_ENABLED="${SEATBELT_ZIZMOR_ENABLED:-${_SEATBELT_CFG_ZIZMOR_ENABLED:-true}}"
 SEATBELT_SEMGREP_ENABLED="${SEATBELT_SEMGREP_ENABLED:-${_SEATBELT_CFG_SEMGREP_ENABLED:-true}}"
+SEATBELT_SHELLCHECK_ENABLED="${SEATBELT_SHELLCHECK_ENABLED:-${_SEATBELT_CFG_SHELLCHECK_ENABLED:-true}}"
+SEATBELT_COMMITLINT_ENABLED="${SEATBELT_COMMITLINT_ENABLED:-${_SEATBELT_CFG_COMMITLINT_ENABLED:-true}}"
+SEATBELT_SIGNING_ENABLED="${SEATBELT_SIGNING_ENABLED:-${_SEATBELT_CFG_SIGNING_ENABLED:-true}}"
 
 # Clean up internal vars
 unset _seatbelt_config_file _seatbelt_repo_root
 unset _SEATBELT_CFG_GITLEAKS_ENABLED _SEATBELT_CFG_CHECKOV_ENABLED
 unset _SEATBELT_CFG_TRIVY_ENABLED _SEATBELT_CFG_ZIZMOR_ENABLED _SEATBELT_CFG_SEMGREP_ENABLED
+unset _SEATBELT_CFG_SHELLCHECK_ENABLED _SEATBELT_CFG_COMMITLINT_ENABLED _SEATBELT_CFG_SIGNING_ENABLED

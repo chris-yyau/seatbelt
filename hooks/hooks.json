@@ -1,5 +1,5 @@
 {
-  "description": "Seatbelt security scanners — run gitleaks, checkov, trivy, zizmor, and semgrep before git commit",
+  "description": "Seatbelt security scanners — run gitleaks, checkov, trivy, zizmor, semgrep, shellcheck, commitlint, and signing before git commit",
   "hooks": {
     "PreToolUse": [
       {
@@ -44,6 +44,33 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-semgrep.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-shellcheck.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-commitlint.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-signing.sh\""
           }
         ]
       }
