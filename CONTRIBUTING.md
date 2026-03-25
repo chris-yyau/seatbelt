@@ -22,7 +22,7 @@ Thanks for your interest in contributing to Seatbelt! This guide covers how to s
 
 3. Optionally install scanner binaries for manual testing:
    ```bash
-   brew install gitleaks checkov trivy zizmor
+   brew install gitleaks checkov trivy zizmor shellcheck
    pip3 install semgrep
    ```
 
@@ -40,6 +40,9 @@ seatbelt/
 │   ├── scan-trivy.sh      # Dependency CVE scanning (warn)
 │   ├── scan-zizmor.sh     # GitHub Actions scanning (warn)
 │   ├── scan-semgrep.sh    # Source code security scanning (warn)
+│   ├── scan-shellcheck.sh # Shell script quality scanning (warn)
+│   ├── scan-commitlint.sh # Commit message format validation (advisory)
+│   ├── scan-signing.sh    # Commit signing reminder (advisory)
 │   └── scan-summary.sh    # PostToolUse aggregate summary
 ├── scripts/
 │   └── doctor.sh          # Health check and diagnostics

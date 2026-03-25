@@ -8,7 +8,7 @@ Zero-config security scanning for vibe coders. Seatbelt is a [Claude Code plugin
 
 ## What it does
 
-Seatbelt intercepts `git commit` commands and runs five security scanners on your staged changes:
+Seatbelt intercepts `git commit` commands and runs eight security scanners on your staged changes:
 
 | Scanner | What it checks | Fail mode |
 |---------|---------------|-----------|
@@ -17,14 +17,17 @@ Seatbelt intercepts `git commit` commands and runs five security scanners on you
 | **trivy** | Dependency CVEs in lock files (HIGH/CRITICAL severity) | warn — findings shown, commit allowed |
 | **zizmor** | GitHub Actions workflow security issues (injection, unpinned actions) | warn — findings shown, commit allowed |
 | **semgrep** | Code-level security bugs (SQL injection, XSS, command injection) | warn — findings shown, commit allowed |
+| **shellcheck** | Shell script quality and correctness issues | warn — findings shown, commit allowed |
+| **commitlint** | Conventional commit message format (advisory) | warn — findings shown, commit allowed |
+| **signing** | Commit signing reminder (advisory) | warn — findings shown, commit allowed |
 
-You don't need all five installed. Scanners that aren't found are skipped with a warning like:
+You don't need all eight installed. Scanners that aren't found are skipped with a warning like:
 
 ```
 SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)
 ```
 
-Install any combination you want — Seatbelt works with one scanner or all five.
+Install any combination you want — Seatbelt works with one scanner or all eight.
 
 ## Install
 
@@ -48,19 +51,20 @@ Then run setup inside Claude Code:
 If you prefer to install scanner binaries yourself:
 
 ```bash
-# macOS (recommended: install all five)
-brew install gitleaks checkov trivy zizmor
+# macOS (recommended: install all)
+brew install gitleaks checkov trivy zizmor shellcheck
 pip3 install semgrep
 
 # Linux (brew if available, otherwise pip3/releases)
-brew install gitleaks checkov trivy zizmor
+brew install gitleaks checkov trivy zizmor shellcheck
 pip3 install semgrep
 # Or without brew:
-#   gitleaks: https://github.com/gitleaks/gitleaks/releases
-#   trivy:    https://aquasecurity.github.io/trivy/latest/getting-started/installation/
-#   checkov:  pip3 install checkov
-#   zizmor:   pip3 install zizmor (or cargo install zizmor)
-#   semgrep:  pip3 install semgrep
+#   gitleaks:   https://github.com/gitleaks/gitleaks/releases
+#   trivy:      https://aquasecurity.github.io/trivy/latest/getting-started/installation/
+#   checkov:    pip3 install checkov
+#   zizmor:     pip3 install zizmor (or cargo install zizmor)
+#   semgrep:    pip3 install semgrep
+#   shellcheck: https://github.com/koalaman/shellcheck/releases
 ```
 
 ## How it works
@@ -70,9 +74,11 @@ Seatbelt registers [PreToolUse hooks](https://docs.anthropic.com/en/docs/claude-
 When a `git commit` is detected, seatbelt uses two approaches to scan staged content:
 
 - **gitleaks** reads the git staging area directly via its `--staged` flag
-- **checkov, trivy, zizmor, semgrep** extract staged file content to a temp directory via `git show`, then scan the extracted files. This ensures scanners see exactly what will be committed, not the current working tree.
+- **checkov, trivy, zizmor, semgrep, shellcheck** extract staged file content to a temp directory via `git show`, then scan the extracted files. This ensures scanners see exactly what will be committed, not the current working tree.
+- **commitlint** validates the commit message format against conventional commit rules
+- **signing** checks whether `commit.gpgsign` is configured in git
 
-All five scanner hooks share a common commit-detection library (`hooks/scripts/lib/detect-commit.sh`) that parses Claude Code's hook input JSON to determine if the command is a `git commit`. Non-commit commands are ignored with near-zero overhead.
+All eight scanner hooks share a common commit-detection library (`hooks/scripts/lib/detect-commit.sh`) that parses Claude Code's hook input JSON to determine if the command is a `git commit`. Non-commit commands are ignored with near-zero overhead.
 
 If you use partial staging (`git add -p`), seatbelt scans exactly the hunks you staged.
 
@@ -96,8 +102,17 @@ Claude Code                        Seatbelt Plugin
                     ├─► scan-zizmor.sh  ──► extract staged workflows ──► zizmor
                     │     └─► WARN on workflow issues (commit proceeds)
                     │
-                    └─► scan-semgrep.sh ──► extract staged source ──► semgrep
-                          └─► WARN on security bugs (commit proceeds)
+                    ├─► scan-semgrep.sh ──► extract staged source ──► semgrep
+                    │     └─► WARN on security bugs (commit proceeds)
+                    │
+                    ├─► scan-shellcheck.sh ──► extract staged scripts ──► shellcheck
+                    │     └─► WARN on shell script issues (commit proceeds)
+                    │
+                    ├─► scan-commitlint.sh ──► validate commit message format
+                    │     └─► WARN on non-conventional message (commit proceeds)
+                    │
+                    └─► scan-signing.sh ──► check git gpgsign config
+                          └─► WARN if signing not configured (commit proceeds)
 
                  PostToolUse hook fires
                     │
@@ -115,7 +130,7 @@ Claude Code                        Seatbelt Plugin
 `/seatbelt:setup` is a one-stop onboarding command that:
 
 1. Runs the doctor script to detect installed scanners and their versions
-2. Shows a health score (`Seatbelt Health: N/5 scanners active`)
+2. Shows a health score (`Seatbelt Health: N/6 scanners active`)
 3. Groups missing scanners by package manager into batched install commands
 4. Asks for your confirmation before running anything
 5. Re-runs the doctor after installation to confirm success
@@ -135,6 +150,9 @@ export SKIP_CHECKOV=1
 export SKIP_TRIVY=1
 export SKIP_ZIZMOR=1
 export SKIP_SEMGREP=1
+export SKIP_SHELLCHECK=1
+export SKIP_COMMITLINT=1
+export SKIP_SIGNING=1
 ```
 
 Suppress specific findings:
@@ -149,11 +167,11 @@ One-stop onboarding: detects missing scanners, proposes install commands grouped
 
 ### `/seatbelt:doctor`
 
-Checks which scanners are installed, reports versions, shows a health score (`N/5 scanners active`), flags trivy's DB status as a distinct condition, and provides platform-specific install instructions for anything missing. Suggests `/seatbelt:setup` when tools are missing.
+Checks which scanners are installed, reports versions, shows a health score (`N/6 scanners active`), flags trivy's DB status as a distinct condition, and provides platform-specific install instructions for anything missing. Suggests `/seatbelt:setup` when tools are missing.
 
 ### `/seatbelt:scan`
 
-Runs all enabled scanners on currently staged files — the same scan that runs at commit time. Use this to check "will my commit pass?" before committing. Reports BLOCKED, WARNINGS, or CLEAN.
+Runs all eight enabled scanners on currently staged files — the same scan that runs at commit time. Use this to check "will my commit pass?" before committing. Reports BLOCKED, WARNINGS, or CLEAN.
 
 ## Configuration
 
@@ -178,7 +196,7 @@ export SEATBELT_CHECKOV_ENABLED=false
 - **bash** 3.2+ (macOS default is fine)
 - **python3** (for JSON parsing in hook scripts; `brew install python3` if not present)
 - **git**
-- Scanner binaries: any combination of gitleaks, checkov, trivy, zizmor, semgrep
+- Scanner binaries: any combination of gitleaks, checkov, trivy, zizmor, semgrep, shellcheck
 
 ## Supported file types
 
@@ -189,6 +207,9 @@ export SEATBELT_CHECKOV_ENABLED=false
 | trivy | package-lock.json, yarn.lock, pnpm-lock.yaml, Cargo.lock, requirements.txt, poetry.lock, uv.lock, Pipfile.lock, go.sum, Gemfile.lock, composer.lock |
 | zizmor | .github/workflows/*.yml, .github/workflows/*.yaml |
 | semgrep | *.py, *.js, *.ts, *.jsx, *.tsx, *.java, *.go, *.rb, *.php, *.c, *.cpp, *.cs, *.rs, *.swift, *.kt, *.scala, *.yaml, *.yml |
+| shellcheck | *.sh, *.bash |
+| commitlint | Commit message (from -m flag) |
+| signing | Git config (commit.gpgsign) |
 
 ## Scan summary
 
