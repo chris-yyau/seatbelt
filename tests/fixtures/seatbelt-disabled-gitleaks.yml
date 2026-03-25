@@ -1,0 +1,3 @@
+scanners:
+  gitleaks:
+    enabled: false
