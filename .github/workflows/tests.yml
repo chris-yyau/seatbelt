@@ -35,7 +35,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run shellcheck
-        run: shellcheck hooks/scripts/scan-*.sh scripts/doctor.sh
+        run: shellcheck hooks/scripts/scan-*.sh hooks/scripts/lib/*.sh scripts/doctor.sh
 
   commitlint:
     if: github.event_name == 'pull_request'
