@@ -23,11 +23,12 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
 | trivy | installed/missing | version or — | warn |
 | zizmor | installed/missing | version or — | warn |
 | semgrep | installed/missing | version or — | warn |
+| shellcheck | installed/missing | version or — | warn |
 
-Show the health score: `Seatbelt Health: N/5 scanners active`
+Show the health score: `Seatbelt Health: N/6 scanners active`
 
-3. If all 5 scanners are installed:
-   - Show "All 5 scanners active — seatbelt is fully operational."
+3. If all 6 scanners are installed:
+   - Show "All 6 scanners active — seatbelt is fully operational."
    - If trivy is installed but `db_cached` is false, note: "trivy is installed but has no vulnerability database. Run `trivy image --download-db-only` to enable dependency scanning."
    - Exit.
 
@@ -68,11 +69,12 @@ Show the health score: `Seatbelt Health: N/5 scanners active`
      - semgrep: Two phases:
        1. Rule download: `semgrep --config p/security-audit --validate`. If this fails, report as "NEEDS RULES" (analogous to trivy's "NEEDS DB")
        2. Scan test: `semgrep scan --config p/security-audit --json --quiet <path>`. Expect at least one finding.
+     - shellcheck: `shellcheck --version` to verify it works
    - Report result per scanner: OK (ran successfully), FAIL (errored), or NEEDS DB (trivy without DB)
    - Clean up the temp directory
 
 9. Show final summary:
-   > **Seatbelt Health: 5/5 scanners active**
+   > **Seatbelt Health: 6/6 scanners active**
    >
    > | Scanner | Status | Smoke Test |
    > |---------|--------|------------|
@@ -81,6 +83,7 @@ Show the health score: `Seatbelt Health: N/5 scanners active`
    > | trivy | installed | OK |
    > | zizmor | installed | OK |
    > | semgrep | installed | OK |
+   > | shellcheck | installed | OK |
    >
    > Setup complete. Seatbelt will scan your staged changes before every commit.
 

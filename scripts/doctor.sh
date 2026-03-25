@@ -25,7 +25,8 @@ get_version() {
         checkov)  checkov --version 2>/dev/null | head -1 ;;
         trivy)    trivy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
         zizmor)   zizmor --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
-        semgrep)  semgrep --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
+        semgrep)    semgrep --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
+        shellcheck) shellcheck --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
     esac
 }
 
@@ -107,6 +108,13 @@ get_install_cmd() {
                 echo "https://semgrep.dev/docs/getting-started/"
             fi
             ;;
+        shellcheck)
+            if [ "$has_brew" = "true" ]; then
+                echo "brew install shellcheck"
+            else
+                echo "https://www.shellcheck.net/"
+            fi
+            ;;
     esac
 }
 
@@ -185,6 +193,7 @@ CHECKOV=$(check_tool "checkov")
 TRIVY=$(check_tool "trivy")
 ZIZMOR=$(check_tool "zizmor")
 SEMGREP=$(check_tool "semgrep")
+SHELLCHECK=$(check_tool "shellcheck")
 
 # ── Compute health score ─────────────────────────────────────────────
 # Trivy is "active" only when installed AND db_cached is true.
@@ -195,18 +204,18 @@ if command -v python3 &>/dev/null; then
 import sys, json
 scanners = json.loads(sys.argv[1])
 active = 0
-for name in ['gitleaks', 'checkov', 'zizmor', 'semgrep']:
+for name in ['gitleaks', 'checkov', 'zizmor', 'semgrep', 'shellcheck']:
     if scanners[name].get('installed', False):
         active += 1
 trivy = scanners['trivy']
 if trivy.get('installed', False) and trivy.get('db_cached', False):
     active += 1
 print(active)
-" "{\"gitleaks\":${GITLEAKS},\"checkov\":${CHECKOV},\"trivy\":${TRIVY},\"zizmor\":${ZIZMOR},\"semgrep\":${SEMGREP}}" 2>/dev/null || echo "0")
+" "{\"gitleaks\":${GITLEAKS},\"checkov\":${CHECKOV},\"trivy\":${TRIVY},\"zizmor\":${ZIZMOR},\"semgrep\":${SEMGREP},\"shellcheck\":${SHELLCHECK}}" 2>/dev/null || echo "0")
 else
     # Fallback: glob patterns (order-dependent but works without python3)
     ACTIVE_COUNT=0
-    for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR" "$SEMGREP"; do
+    for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR" "$SEMGREP" "$SHELLCHECK"; do
         case "$check_var" in
             *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
         esac
@@ -215,9 +224,24 @@ else
         *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
     esac
 fi
-HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":5,\"score\":\"${ACTIVE_COUNT}/5\"}"
+HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":6,\"score\":\"${ACTIVE_COUNT}/6\"}"
+
+# ── Advisory checks (not part of health score) ──────────────────
+# Git config booleans can be true/yes/on/1 — normalize to true/false
+_gpgsign_raw=$(git config --get commit.gpgsign 2>/dev/null || true)
+case "$_gpgsign_raw" in
+    true|yes|on|1) GPGSIGN_CONFIGURED="true" ;;
+    *)             GPGSIGN_CONFIGURED="false" ;;
+esac
+unset _gpgsign_raw
+
+# Honor .seatbelt.yml config for advisory scanners
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "$0")/../hooks/scripts/lib" 2>/dev/null && pwd)/config.sh" 2>/dev/null || true
+COMMITLINT_ADV_ENABLED="${SEATBELT_COMMITLINT_ENABLED:-true}"
+SIGNING_ADV_ENABLED="${SEATBELT_SIGNING_ENABLED:-true}"
 
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF
-{"health":${HEALTH},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"semgrep":${SEMGREP},"platform":"${PLATFORM}","package_managers":[${PMS}]}
+{"health":${HEALTH},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"semgrep":${SEMGREP},"shellcheck":${SHELLCHECK},"advisory":{"commitlint":{"enabled":${COMMITLINT_ADV_ENABLED}},"signing":{"enabled":${SIGNING_ADV_ENABLED},"gpgsign_configured":${GPGSIGN_CONFIGURED}}},"platform":"${PLATFORM}","package_managers":[${PMS}]}
 EOF
