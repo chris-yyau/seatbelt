@@ -22,17 +22,18 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
 | checkov | installed/missing | version or — | BLOCK |
 | trivy | installed/missing | version or — | warn |
 | zizmor | installed/missing | version or — | warn |
+| semgrep | installed/missing | version or — | warn |
 
-Show the health score: `Seatbelt Health: N/4 scanners active`
+Show the health score: `Seatbelt Health: N/5 scanners active`
 
-3. If all 4 scanners are installed:
-   - Show "All 4 scanners active — seatbelt is fully operational."
+3. If all 5 scanners are installed:
+   - Show "All 5 scanners active — seatbelt is fully operational."
    - If trivy is installed but `db_cached` is false, note: "trivy is installed but has no vulnerability database. Run `trivy image --download-db-only` to enable dependency scanning."
    - Exit.
 
 4. If scanners are missing, collect the `install_cmd` for each missing tool from the doctor output. Group commands by package manager into batches. For example:
    - If gitleaks and trivy are both missing and both use brew: `brew install gitleaks trivy`
-   - If checkov uses pip3: `pip3 install checkov`
+   - If checkov and semgrep both use pip3: `pip3 install checkov semgrep`
 
 5. Present the install plan to the user. Show each command that will be run. Ask for confirmation before executing. Example:
 
@@ -56,6 +57,7 @@ Show the health score: `Seatbelt Health: N/4 scanners active`
      - checkov: a minimal `Dockerfile` with `FROM ubuntu:latest`
      - trivy: a minimal `package-lock.json` with `{"name":"test","lockfileVersion":2}`
      - zizmor: a minimal `.github/workflows/test.yml` with `on: push`
+     - semgrep: a temp Python file with `import subprocess; subprocess.call(cmd, shell=True)` (triggers command injection detection)
    - For trivy: if `db_cached` is false, run `trivy image --download-db-only` first. If download fails, report as "NEEDS DB" instead of running the scan.
    - Stage the files with `git add`
    - Run each scanner binary directly (not via hooks):
@@ -63,11 +65,14 @@ Show the health score: `Seatbelt Health: N/4 scanners active`
      - `checkov --file <path> --framework dockerfile --quiet`
      - `trivy fs --scanners vuln --severity HIGH,CRITICAL --skip-db-update --no-progress <path>`
      - `zizmor --no-progress <path>`
+     - semgrep: Two phases:
+       1. Rule download: `semgrep --config p/security-audit --validate`. If this fails, report as "NEEDS RULES" (analogous to trivy's "NEEDS DB")
+       2. Scan test: `semgrep scan --config p/security-audit --json --quiet <path>`. Expect at least one finding.
    - Report result per scanner: OK (ran successfully), FAIL (errored), or NEEDS DB (trivy without DB)
    - Clean up the temp directory
 
 9. Show final summary:
-   > **Seatbelt Health: 4/4 scanners active**
+   > **Seatbelt Health: 5/5 scanners active**
    >
    > | Scanner | Status | Smoke Test |
    > |---------|--------|------------|
@@ -75,6 +80,7 @@ Show the health score: `Seatbelt Health: N/4 scanners active`
    > | checkov | installed | OK |
    > | trivy | installed | OK |
    > | zizmor | installed | OK |
+   > | semgrep | installed | OK |
    >
    > Setup complete. Seatbelt will scan your staged changes before every commit.
 

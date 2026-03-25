@@ -23,6 +23,7 @@ Thanks for your interest in contributing to Seatbelt! This guide covers how to s
 3. Optionally install scanner binaries for manual testing:
    ```bash
    brew install gitleaks checkov trivy zizmor
+   pip3 install semgrep
    ```
 
 ## Project Structure
@@ -32,17 +33,20 @@ seatbelt/
 ├── hooks/scripts/         # Scanner hook scripts (PreToolUse + PostToolUse)
 │   ├── lib/               # Shared libraries
 │   │   ├── detect-commit.sh   # Git commit detection from hook JSON
-│   │   └── result-dir.sh     # Temp result directory management
+│   │   ├── result-dir.sh     # Temp result directory management
+│   │   └── config.sh         # .seatbelt.yml config loader
 │   ├── scan-gitleaks.sh   # Secret scanning (BLOCK)
 │   ├── scan-checkov.sh    # IaC scanning (BLOCK)
 │   ├── scan-trivy.sh      # Dependency CVE scanning (warn)
 │   ├── scan-zizmor.sh     # GitHub Actions scanning (warn)
+│   ├── scan-semgrep.sh    # Source code security scanning (warn)
 │   └── scan-summary.sh    # PostToolUse aggregate summary
 ├── scripts/
 │   └── doctor.sh          # Health check and diagnostics
 ├── commands/              # Claude Code slash commands
 │   ├── setup.md           # /seatbelt:setup
-│   └── doctor.md          # /seatbelt:doctor
+│   ├── doctor.md          # /seatbelt:doctor
+│   └── scan.md            # /seatbelt:scan
 ├── tests/                 # Test suite (bash-based)
 │   ├── run-tests.sh       # Test runner
 │   ├── fixtures/          # Test fixture files
@@ -58,7 +62,7 @@ seatbelt/
 bash tests/run-tests.sh
 
 # Run ShellCheck linting
-shellcheck hooks/scripts/scan-*.sh scripts/doctor.sh
+shellcheck hooks/scripts/scan-*.sh hooks/scripts/lib/*.sh scripts/doctor.sh
 ```
 
 All tests are pure bash — no external test framework required. The test suite mocks scanner binaries so you don't need them installed to run tests.
@@ -101,7 +105,7 @@ chore: bump CI action versions
 3. Ensure all checks pass locally:
    ```bash
    bash tests/run-tests.sh
-   shellcheck hooks/scripts/scan-*.sh scripts/doctor.sh
+   shellcheck hooks/scripts/scan-*.sh hooks/scripts/lib/*.sh scripts/doctor.sh
    ```
 4. Open a PR against `main`
 5. CI runs: tests, shellcheck, and commitlint
@@ -112,6 +116,7 @@ To add a new scanner hook:
 
 1. Create `hooks/scripts/scan-<name>.sh` following the existing pattern:
    - Source `lib/detect-commit.sh` for commit detection
+   - Source `lib/config.sh` for `.seatbelt.yml` config support
    - Check `SKIP_<NAME>` and `SKIP_SEATBELT` env vars
    - Handle missing binary gracefully (degraded mode)
    - Use `BLOCK` or `warn` fail mode consistently
