@@ -1,13 +1,18 @@
 # Tests for lib/config.sh
 CONFIG_SCRIPT="$PROJECT_ROOT/hooks/scripts/lib/config.sh"
 
+# Helper: unset any inherited SEATBELT_*_ENABLED vars to isolate tests
+_unset_seatbelt_vars() {
+    unset SEATBELT_GITLEAKS_ENABLED SEATBELT_CHECKOV_ENABLED SEATBELT_TRIVY_ENABLED SEATBELT_ZIZMOR_ENABLED SEATBELT_SEMGREP_ENABLED 2>/dev/null || true
+}
+
 # ── No config file -> all scanners enabled (defaults) ─────────────────
 test_config_defaults_no_config_file() {
     local tmpdir result
     tmpdir=$(mktemp -d)
     git -C "$tmpdir" init -q
 
-    result=$(cd "$tmpdir" && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -31,7 +36,7 @@ test_config_disable_gitleaks() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-disabled-gitleaks.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -55,7 +60,7 @@ test_config_all_enabled() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-all-enabled.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -79,7 +84,7 @@ test_config_invalid_yaml() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-invalid.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -103,7 +108,7 @@ test_config_no_scanners_key() {
     git -C "$tmpdir" init -q
     echo "foo: bar" > "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -127,7 +132,7 @@ test_config_env_var_precedence() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-disabled-gitleaks.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && export SEATBELT_GITLEAKS_ENABLED=true && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && export SEATBELT_GITLEAKS_ENABLED=true && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""

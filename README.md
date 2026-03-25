@@ -18,7 +18,7 @@ Seatbelt intercepts `git commit` commands and runs five security scanners on you
 | **zizmor** | GitHub Actions workflow security issues (injection, unpinned actions) | warn — findings shown, commit allowed |
 | **semgrep** | Code-level security bugs (SQL injection, XSS, command injection) | warn — findings shown, commit allowed |
 
-You don't need all four installed. Scanners that aren't found are skipped with a warning like:
+You don't need all five installed. Scanners that aren't found are skipped with a warning like:
 
 ```
 SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)

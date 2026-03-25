@@ -22,11 +22,6 @@ fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 
-# ── Config file override ─────────────────────────────────────────
-# shellcheck disable=SC1091
-source "$LIB_DIR/config.sh"
-[ "$SEATBELT_SEMGREP_ENABLED" = "false" ] && exit 0
-
 # ── Clean stale results from a previous blocked commit ───────────
 # PreToolUse scanners write results, but if a blocking scanner prevents the
 # commit, the PostToolUse summary hook never fires and stale files persist.
@@ -35,9 +30,14 @@ source "$LIB_DIR/config.sh"
 source "$LIB_DIR/result-dir.sh"
 rm -f "$SEATBELT_RESULT_DIR/semgrep"
 
+# ── Config file override ─────────────────────────────────────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/config.sh"
+[ "$SEATBELT_SEMGREP_ENABLED" = "false" ] && exit 0
+
 # ── semgrep availability ──────────────────────────────────────────
 if ! command -v semgrep &>/dev/null; then
-    echo "SEATBELT DEGRADED: semgrep not installed — source code scanning DISABLED (pip3 install semgrep | /seatbelt doctor)" >&2
+    echo "SEATBELT DEGRADED: semgrep not installed — source code scanning DISABLED (pip3 install semgrep | /seatbelt:doctor)" >&2
     exit 0
 fi
 
@@ -120,8 +120,8 @@ if [ "$FINDING_COUNT" = "-1" ]; then
 elif [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
     echo "SEATBELT: semgrep found ${FINDING_COUNT} finding(s):" >&2
     if [ -n "$FINDING_SUMMARY" ]; then
-        # Strip temp dir prefix from paths for clean output
-        CLEAN_SUMMARY=$(printf '%s' "$FINDING_SUMMARY" | sed "s|$SCAN_DIR/||g")
+        # Strip temp dir prefix from paths for clean output (bash substitution avoids sed regex issues with dots in paths)
+        CLEAN_SUMMARY="${FINDING_SUMMARY//$SCAN_DIR\//}"
         printf '%s\n' "$CLEAN_SUMMARY" >&2
     fi
     # Write result for summary aggregation
