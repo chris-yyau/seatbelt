@@ -22,6 +22,11 @@ fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 
+# ── Config file override ─────────────────────────────────────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/config.sh"
+[ "$SEATBELT_TRIVY_ENABLED" = "false" ] && exit 0
+
 # ── Clean stale results from a previous blocked commit ───────────
 # PreToolUse scanners write results, but if a blocking scanner prevents the
 # commit, the PostToolUse summary hook never fires and stale files persist.
