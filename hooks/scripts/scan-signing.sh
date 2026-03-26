@@ -48,7 +48,7 @@ try:
             tokens = tokens[1:]
         if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
             for t in tokens[2:]:
-                if t in ('-S', '--gpg-sign') or t.startswith('--gpg-sign='):
+                if t in ('-S', '--gpg-sign') or t.startswith('--gpg-sign=') or (t.startswith('-S') and len(t) > 2 and t[2] != '-'):
                     print('yes')
                     break
             break

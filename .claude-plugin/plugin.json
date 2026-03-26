@@ -7,5 +7,5 @@
   },
   "license": "MIT",
   "repository": "https://github.com/chris-yyau/seatbelt",
-  "keywords": ["security", "scanning", "hooks", "gitleaks", "checkov", "trivy", "zizmor", "semgrep", "shellcheck", "commitlint", "vibe-coding"]
+  "keywords": ["security", "scanning", "hooks", "gitleaks", "checkov", "trivy", "zizmor", "semgrep", "shellcheck", "commitlint", "signing", "vibe-coding"]
 }

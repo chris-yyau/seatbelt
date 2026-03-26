@@ -111,6 +111,8 @@ get_install_cmd() {
         shellcheck)
             if [ "$has_brew" = "true" ]; then
                 echo "brew install shellcheck"
+            elif echo "$PMS_RAW" | grep -qw "apt-get"; then
+                echo "sudo apt-get install -y shellcheck"
             else
                 echo "https://www.shellcheck.net/"
             fi

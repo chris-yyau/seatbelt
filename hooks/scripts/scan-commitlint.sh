@@ -50,8 +50,6 @@ try:
             tokens = tokens[1:]
         if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
             # Check for --fixup, --squash, -F/--file (skip validation)
-            # Process tokens sequentially: skip flags consume their argument
-            skip_tokens = set()
             j = 2
             while j < len(tokens):
                 t = tokens[j]
@@ -103,7 +101,7 @@ fi
 
 if [ "$VALID" -eq 0 ]; then
     echo "SEATBELT: commit message does not follow conventional commits format" >&2
-    echo "  Expected: type(scope): description" >&2
+    echo "  Expected: type[(scope)]: description  (scope is optional)" >&2
     echo "  Types: feat, fix, refactor, docs, test, chore, perf, ci, build, style, revert" >&2
     echo "  Got: $(printf '%s' "$COMMIT_MSG" | head -c 80)" >&2
 fi

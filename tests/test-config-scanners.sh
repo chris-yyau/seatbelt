@@ -3,7 +3,7 @@ GITLEAKS_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-gitleaks.sh"
 CHECKOV_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-checkov.sh"
 TRIVY_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-trivy.sh"
 ZIZMOR_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-zizmor.sh"
-SHELLCHECK_SC_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-shellcheck.sh"
+SHELLCHECK_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-shellcheck.sh"
 COMMITLINT_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-commitlint.sh"
 SIGNING_SCRIPT="$PROJECT_ROOT/hooks/scripts/scan-signing.sh"
 
@@ -36,7 +36,7 @@ test_zizmor_config_disabled() {
 test_zizmor_config_disabled
 
 test_shellcheck_config_disabled() {
-    run_hook_test "shellcheck respects config disabled" "$SHELLCHECK_SC_SCRIPT" "$FIXTURES_DIR/git-commit.json" "SEATBELT_SHELLCHECK_ENABLED=false"
+    run_hook_test "shellcheck respects config disabled" "$SHELLCHECK_SCRIPT" "$FIXTURES_DIR/git-commit.json" "SEATBELT_SHELLCHECK_ENABLED=false"
     ERRORS=""
     assert_exit_0 && assert_stdout_empty && pass "shellcheck respects SEATBELT_SHELLCHECK_ENABLED=false" || fail "shellcheck respects SEATBELT_SHELLCHECK_ENABLED=false"
 }
