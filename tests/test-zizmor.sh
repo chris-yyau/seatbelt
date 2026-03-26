@@ -44,7 +44,7 @@ test_zizmor_degraded_mode() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$ZIZMOR_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$ZIZMOR_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)

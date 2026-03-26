@@ -23,7 +23,7 @@ test_summary_no_results() {
     tmperr=$(mktemp)
     (
         export SEATBELT_RESULT_DIR="$tmpdir/seatbelt-nonexistent"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$SUMMARY_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$SUMMARY_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -57,7 +57,7 @@ test_summary_aggregates_results() {
     tmperr=$(mktemp)
     (
         export SEATBELT_RESULT_DIR="$resultdir"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$SUMMARY_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$SUMMARY_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -91,7 +91,7 @@ test_summary_cleans_up() {
     tmperr=$(mktemp)
     (
         export SEATBELT_RESULT_DIR="$resultdir"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$SUMMARY_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$SUMMARY_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -126,7 +126,7 @@ test_summary_multi_file_scanner() {
     tmperr=$(mktemp)
     (
         export SEATBELT_RESULT_DIR="$resultdir"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$SUMMARY_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$SUMMARY_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -161,7 +161,7 @@ test_summary_non_numeric_lines() {
     tmperr=$(mktemp)
     (
         export SEATBELT_RESULT_DIR="$resultdir"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$SUMMARY_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$SUMMARY_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)

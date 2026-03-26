@@ -51,7 +51,7 @@ test_gitleaks_degraded_mode() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$GITLEAKS_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$GITLEAKS_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -74,7 +74,7 @@ test_gitleaks_camelcase_fields() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit-camelcase.json" | bash "$GITLEAKS_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$GITLEAKS_SCRIPT" <"$FIXTURES_DIR/git-commit-camelcase.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -97,7 +97,7 @@ test_gitleaks_env_prefix_commit() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit-env-prefix.json" | bash "$GITLEAKS_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$GITLEAKS_SCRIPT" <"$FIXTURES_DIR/git-commit-env-prefix.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -120,7 +120,7 @@ test_gitleaks_quoted_env_commit() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit-quoted-env.json" | bash "$GITLEAKS_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$GITLEAKS_SCRIPT" <"$FIXTURES_DIR/git-commit-quoted-env.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -143,7 +143,7 @@ test_gitleaks_amend_commit() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit-amend.json" | bash "$GITLEAKS_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$GITLEAKS_SCRIPT" <"$FIXTURES_DIR/git-commit-amend.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)

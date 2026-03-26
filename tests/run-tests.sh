@@ -81,7 +81,7 @@ run_hook_test() {
         for var in "$@"; do
             export "$var"
         done
-        cat "$fixture" | bash "$script" >"$tmpout" 2>"$tmperr"
+        bash "$script" <"$fixture" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
 
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)

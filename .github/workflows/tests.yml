@@ -69,7 +69,8 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           git init -q && git config user.email "ci@test" && git config user.name "CI"
-          echo 'AKIAIOSFODNN7EXAMPLE' > secret.txt
+          # Use a GitHub PAT pattern (ghp_ prefix) which gitleaks reliably detects
+          echo 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh' > secret.txt
           git add secret.txt
           OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || EXIT=$?
           if [ "${EXIT:-0}" -ne 1 ]; then
