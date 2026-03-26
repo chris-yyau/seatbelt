@@ -1,11 +1,11 @@
 {
   "name": "seatbelt",
-  "version": "3.0.0",
-  "description": "Zero-config security scanning for vibe coders. Integrates gitleaks, checkov, trivy, zizmor, and semgrep as pre-commit hooks.",
+  "version": "3.1.0",
+  "description": "Zero-config security scanning for vibe coders. Integrates gitleaks, checkov, trivy, zizmor, semgrep, shellcheck, commitlint, and signing as pre-commit hooks.",
   "author": {
     "name": "seatbelt contributors"
   },
   "license": "MIT",
   "repository": "https://github.com/chris-yyau/seatbelt",
-  "keywords": ["security", "scanning", "hooks", "gitleaks", "checkov", "trivy", "zizmor", "semgrep", "vibe-coding"]
+  "keywords": ["security", "scanning", "hooks", "gitleaks", "checkov", "trivy", "zizmor", "semgrep", "shellcheck", "commitlint", "signing", "vibe-coding"]
 }

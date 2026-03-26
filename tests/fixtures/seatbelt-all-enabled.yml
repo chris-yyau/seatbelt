@@ -9,3 +9,9 @@ scanners:
     enabled: true
   semgrep:
     enabled: true
+  shellcheck:
+    enabled: true
+  commitlint:
+    enabled: true
+  signing:
+    enabled: true

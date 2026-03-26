@@ -5,7 +5,7 @@ description: Run all enabled seatbelt scanners on staged files (parity with comm
 
 # Seatbelt Scan
 
-Run all enabled security scanners on currently staged files. This is the same scan that runs at commit time, so you can check "will my commit pass?" before committing.
+Run all eight enabled security scanners on currently staged files. This is the same scan that runs at commit time, so you can check "will my commit pass?" before committing.
 
 ## Prerequisites
 
@@ -21,21 +21,24 @@ Run each scanner script sequentially, piping a synthetic git commit hook input. 
 
 The synthetic input simulates a git commit command:
 ```json
-{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}
+{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}
 ```
 
 Run each scanner in order, capturing stderr for findings:
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-gitleaks.sh
-echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-checkov.sh
-echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-trivy.sh
-echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-zizmor.sh
-echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-semgrep.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-gitleaks.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-checkov.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-trivy.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-zizmor.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-semgrep.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-shellcheck.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-commitlint.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-signing.sh
 ```
 
 Then run the summary aggregator:
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m scan"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-summary.sh
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m 'chore: seatbelt scan'"}}' | bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-summary.sh
 ```
 
 ## Presenting Results

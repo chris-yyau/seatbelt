@@ -3,7 +3,7 @@ CONFIG_SCRIPT="$PROJECT_ROOT/hooks/scripts/lib/config.sh"
 
 # Helper: unset any inherited SEATBELT_*_ENABLED vars to isolate tests
 _unset_seatbelt_vars() {
-    unset SEATBELT_GITLEAKS_ENABLED SEATBELT_CHECKOV_ENABLED SEATBELT_TRIVY_ENABLED SEATBELT_ZIZMOR_ENABLED SEATBELT_SEMGREP_ENABLED 2>/dev/null || true
+    unset SEATBELT_GITLEAKS_ENABLED SEATBELT_CHECKOV_ENABLED SEATBELT_TRIVY_ENABLED SEATBELT_ZIZMOR_ENABLED SEATBELT_SEMGREP_ENABLED SEATBELT_SHELLCHECK_ENABLED SEATBELT_COMMITLINT_ENABLED SEATBELT_SIGNING_ENABLED 2>/dev/null || true
 }
 
 # ── No config file -> all scanners enabled (defaults) ─────────────────
@@ -12,7 +12,7 @@ test_config_defaults_no_config_file() {
     tmpdir=$(mktemp -d)
     git -C "$tmpdir" init -q
 
-    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED SHELLCHECK=$SEATBELT_SHELLCHECK_ENABLED COMMITLINT=$SEATBELT_COMMITLINT_ENABLED SIGNING=$SEATBELT_SIGNING_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -20,7 +20,10 @@ test_config_defaults_no_config_file() {
        echo "$result" | grep -q "CHECKOV=true" && \
        echo "$result" | grep -q "TRIVY=true" && \
        echo "$result" | grep -q "ZIZMOR=true" && \
-       echo "$result" | grep -q "SEMGREP=true"; then
+       echo "$result" | grep -q "SEMGREP=true" && \
+       echo "$result" | grep -q "SHELLCHECK=true" && \
+       echo "$result" | grep -q "COMMITLINT=true" && \
+       echo "$result" | grep -q "SIGNING=true"; then
         pass "config defaults: no config file -> all enabled"
     else
         ERRORS="\n  Expected all scanners true, got: $result"
@@ -36,7 +39,7 @@ test_config_disable_gitleaks() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-disabled-gitleaks.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED SHELLCHECK=$SEATBELT_SHELLCHECK_ENABLED COMMITLINT=$SEATBELT_COMMITLINT_ENABLED SIGNING=$SEATBELT_SIGNING_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -44,7 +47,10 @@ test_config_disable_gitleaks() {
        echo "$result" | grep -q "CHECKOV=true" && \
        echo "$result" | grep -q "TRIVY=true" && \
        echo "$result" | grep -q "ZIZMOR=true" && \
-       echo "$result" | grep -q "SEMGREP=true"; then
+       echo "$result" | grep -q "SEMGREP=true" && \
+       echo "$result" | grep -q "SHELLCHECK=true" && \
+       echo "$result" | grep -q "COMMITLINT=true" && \
+       echo "$result" | grep -q "SIGNING=true"; then
         pass "config: gitleaks disabled, others default true"
     else
         ERRORS="\n  Expected GITLEAKS=false and others true, got: $result"
@@ -60,7 +66,7 @@ test_config_all_enabled() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-all-enabled.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED SHELLCHECK=$SEATBELT_SHELLCHECK_ENABLED COMMITLINT=$SEATBELT_COMMITLINT_ENABLED SIGNING=$SEATBELT_SIGNING_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -68,7 +74,10 @@ test_config_all_enabled() {
        echo "$result" | grep -q "CHECKOV=true" && \
        echo "$result" | grep -q "TRIVY=true" && \
        echo "$result" | grep -q "ZIZMOR=true" && \
-       echo "$result" | grep -q "SEMGREP=true"; then
+       echo "$result" | grep -q "SEMGREP=true" && \
+       echo "$result" | grep -q "SHELLCHECK=true" && \
+       echo "$result" | grep -q "COMMITLINT=true" && \
+       echo "$result" | grep -q "SIGNING=true"; then
         pass "config: all scanners explicitly enabled"
     else
         ERRORS="\n  Expected all scanners true, got: $result"
@@ -84,7 +93,7 @@ test_config_invalid_yaml() {
     git -C "$tmpdir" init -q
     cp "$FIXTURES_DIR/seatbelt-invalid.yml" "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED SHELLCHECK=$SEATBELT_SHELLCHECK_ENABLED COMMITLINT=$SEATBELT_COMMITLINT_ENABLED SIGNING=$SEATBELT_SIGNING_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -92,7 +101,10 @@ test_config_invalid_yaml() {
        echo "$result" | grep -q "CHECKOV=true" && \
        echo "$result" | grep -q "TRIVY=true" && \
        echo "$result" | grep -q "ZIZMOR=true" && \
-       echo "$result" | grep -q "SEMGREP=true"; then
+       echo "$result" | grep -q "SEMGREP=true" && \
+       echo "$result" | grep -q "SHELLCHECK=true" && \
+       echo "$result" | grep -q "COMMITLINT=true" && \
+       echo "$result" | grep -q "SIGNING=true"; then
         pass "config: invalid YAML -> fail-open, all enabled"
     else
         ERRORS="\n  Expected all scanners true (fail-open), got: $result"
@@ -108,7 +120,7 @@ test_config_no_scanners_key() {
     git -C "$tmpdir" init -q
     echo "foo: bar" > "$tmpdir/.seatbelt.yml"
 
-    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED")
+    result=$(cd "$tmpdir" && _unset_seatbelt_vars && source "$CONFIG_SCRIPT" 2>/dev/null && echo "GITLEAKS=$SEATBELT_GITLEAKS_ENABLED CHECKOV=$SEATBELT_CHECKOV_ENABLED TRIVY=$SEATBELT_TRIVY_ENABLED ZIZMOR=$SEATBELT_ZIZMOR_ENABLED SEMGREP=$SEATBELT_SEMGREP_ENABLED SHELLCHECK=$SEATBELT_SHELLCHECK_ENABLED COMMITLINT=$SEATBELT_COMMITLINT_ENABLED SIGNING=$SEATBELT_SIGNING_ENABLED")
     rm -rf "$tmpdir"
 
     ERRORS=""
@@ -116,7 +128,10 @@ test_config_no_scanners_key() {
        echo "$result" | grep -q "CHECKOV=true" && \
        echo "$result" | grep -q "TRIVY=true" && \
        echo "$result" | grep -q "ZIZMOR=true" && \
-       echo "$result" | grep -q "SEMGREP=true"; then
+       echo "$result" | grep -q "SEMGREP=true" && \
+       echo "$result" | grep -q "SHELLCHECK=true" && \
+       echo "$result" | grep -q "COMMITLINT=true" && \
+       echo "$result" | grep -q "SIGNING=true"; then
         pass "config: no scanners key -> all enabled"
     else
         ERRORS="\n  Expected all scanners true, got: $result"

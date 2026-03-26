@@ -35,7 +35,7 @@ test_doctor_has_platform
 test_doctor_has_all_scanners() {
     STDOUT=$(bash "$DOCTOR_SCRIPT" 2>/dev/null)
     ERRORS=""
-    for tool in gitleaks checkov trivy zizmor semgrep; do
+    for tool in gitleaks checkov trivy zizmor semgrep shellcheck; do
         if ! echo "$STDOUT" | python3 -c "import sys, json; d=json.load(sys.stdin); assert '$tool' in d" 2>/dev/null; then
             ERRORS="\n  doctor output missing '$tool' field"
             fail "doctor has all scanners"
@@ -65,7 +65,7 @@ test_doctor_scanner_fields() {
     if ! echo "$STDOUT" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor', 'semgrep']:
+for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor', 'semgrep', 'shellcheck']:
     entry = d[tool]
     assert 'installed' in entry, f'{tool} missing installed'
     assert 'version' in entry, f'{tool} missing version'
