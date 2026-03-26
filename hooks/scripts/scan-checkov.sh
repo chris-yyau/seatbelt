@@ -55,6 +55,16 @@ fi
 SCAN_DIR=$(mktemp -d)
 trap 'rm -rf "$SCAN_DIR"' EXIT
 
+# ── Portable timeout (config-driven, no default for checkov) ─────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_CHECKOV_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_CHECKOV_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_CHECKOV_TIMEOUT"
+    fi
+fi
+
 BLOCKED=0
 BLOCK_DETAILS=""
 EXTRACTED=0
@@ -82,7 +92,11 @@ while IFS= read -r -d '' staged_file; do
     git show ":$staged_file" > "$SCAN_DIR/$staged_file" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
+    if [ -n "$TIMEOUT_CMD" ]; then
+        SCAN_OUTPUT=$($TIMEOUT_CMD $CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
+    else
+        SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
+    fi
 
     # Parse JSON for findings
     FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
@@ -157,6 +171,11 @@ Fix: Address the failed checks listed above.
 False positive? Add #checkov:skip=CKV_XXX:reason above the affected line
 Bypass once: export SKIP_CHECKOV=1 in your shell, then retry"
     block_emit "checkov" "$REASON"
+    # Write advisory result file for summary when strict=false (block_emit only warns)
+    if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
+        mkdir -p "$SEATBELT_RESULT_DIR"
+        echo "${BLOCKED} finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/checkov"
+    fi
 fi
 
 exit 0

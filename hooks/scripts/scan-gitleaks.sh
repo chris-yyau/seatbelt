@@ -42,9 +42,23 @@ if ! command -v gitleaks &>/dev/null; then
     exit 0
 fi
 
+# ── Portable timeout (config-driven, no default for gitleaks) ─────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_GITLEAKS_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_GITLEAKS_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_GITLEAKS_TIMEOUT"
+    fi
+fi
+
 # ── Run gitleaks ────────────────────────────────────────────────────
 GITLEAKS_EXIT=0
-GITLEAKS_OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || GITLEAKS_EXIT=$?
+if [ -n "$TIMEOUT_CMD" ]; then
+    GITLEAKS_OUTPUT=$($TIMEOUT_CMD gitleaks protect --staged --no-banner 2>&1) || GITLEAKS_EXIT=$?
+else
+    GITLEAKS_OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || GITLEAKS_EXIT=$?
+fi
 
 # Exit 0 = clean
 [ "$GITLEAKS_EXIT" -eq 0 ] && exit 0
@@ -62,6 +76,11 @@ Fix: Remove the secret from staged files. Use environment variables or a secret 
 False positive? Add the fingerprint to .gitleaksignore
 Bypass once: export SKIP_GITLEAKS=1 in your shell, then retry"
     block_emit "gitleaks" "$REASON"
+    # Write advisory result file for summary when strict=false (block_emit only warns)
+    if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
+        mkdir -p "$SEATBELT_RESULT_DIR"
+        echo "1 finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/gitleaks"
+    fi
     exit 0
 fi
 
