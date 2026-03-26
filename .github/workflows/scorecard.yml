@@ -4,9 +4,16 @@ on:
   schedule:
     - cron: "0 6 * * 1"
 
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
 jobs:
   scorecard:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       contents: read
@@ -35,4 +42,3 @@ jobs:
           name: scorecard-results
           path: results.sarif
           retention-days: 30
-
