@@ -30,6 +30,7 @@ source "$LIB_DIR/result-dir.sh"
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_CHECKOV_ENABLED" = "false" ] && exit 0
+rm -f "$SEATBELT_RESULT_DIR/checkov"
 # shellcheck disable=SC1091
 source "$LIB_DIR/block-emit.sh"
 
