@@ -53,6 +53,7 @@ trap 'rm -rf "$SCAN_DIR"' EXIT
 
 EXTRACTED=0
 EXPECTED=0
+_ZIZMOR_BLOCK_REASONS=""
 while IFS= read -r -d '' wf; do
     [ -z "$wf" ] && continue
 
@@ -154,7 +155,7 @@ except Exception:
     pass
 " 2>/dev/null || true)
                 if [ "$_zizmor_has_blocking" = "yes" ]; then
-                    block_emit "zizmor" "${FINDING_COUNT} issue(s) at or above ${SEATBELT_ZIZMOR_SEVERITY} severity in $(basename "$wf")"
+                    _ZIZMOR_BLOCK_REASONS="${_ZIZMOR_BLOCK_REASONS}${FINDING_COUNT} issue(s) in $(basename "$wf"); "
                 fi
                 unset _zizmor_has_blocking
             fi
@@ -166,6 +167,11 @@ done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
 if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
     echo "SEATBELT: zizmor: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
+
+# Emit a single block decision after scanning all files (hook protocol expects one JSON)
+if [ -n "$_ZIZMOR_BLOCK_REASONS" ]; then
+    block_emit "zizmor" "Issues at or above ${SEATBELT_ZIZMOR_SEVERITY} severity — ${_ZIZMOR_BLOCK_REASONS%%; }"
 fi
 
 exit 0

@@ -90,6 +90,7 @@ fi
 
 EXTRACTED=0
 EXPECTED=0
+_TRIVY_BLOCK_REASONS=""
 while IFS= read -r -d '' lf; do
     [ -z "$lf" ] && continue
 
@@ -183,7 +184,7 @@ except Exception:
     pass
 " 2>/dev/null || true)
                 if [ "$_trivy_has_blocking" = "yes" ]; then
-                    block_emit "trivy" "${FINDING_COUNT} vulnerability finding(s) at or above ${SEATBELT_TRIVY_SEVERITY} severity in $(basename "$lf")"
+                    _TRIVY_BLOCK_REASONS="${_TRIVY_BLOCK_REASONS}${FINDING_COUNT} finding(s) in $(basename "$lf"); "
                 fi
                 unset _trivy_has_blocking
             fi
@@ -195,6 +196,11 @@ done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
 if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
     echo "SEATBELT: trivy: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
+
+# Emit a single block decision after scanning all files (hook protocol expects one JSON)
+if [ -n "$_TRIVY_BLOCK_REASONS" ]; then
+    block_emit "trivy" "Vulnerability findings at or above ${SEATBELT_TRIVY_SEVERITY} severity — ${_TRIVY_BLOCK_REASONS%%; }"
 fi
 
 exit 0

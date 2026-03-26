@@ -39,28 +39,38 @@ try:
         m = re.search(r"(?m)^\s*strict:\s*(true|false)", content)
         if m:
             cfg["strict"] = m.group(1) == "true"
-        # Parse per-scanner fields
+        # Parse per-scanner fields — extract block between this scanner header
+        # and the next scanner header (stops at sibling scanner names)
         scanner_names = ["gitleaks", "checkov", "trivy", "zizmor", "semgrep", "shellcheck", "commitlint", "signing"]
         for name in scanner_names:
-            pattern = r"(?m)^\s*" + name + r":\s*\n((?:\s+\w+:.*\n)*)"
-            block_match = re.search(pattern, content)
-            if block_match:
-                block = block_match.group(0)
-                scanner = {}
-                em = re.search(r"(?m)^\s+enabled:\s*(true|false)", block)
-                if em:
-                    scanner["enabled"] = em.group(1) == "true"
-                sm = re.search(r"(?m)^\s+severity:\s*(\S+)", block)
-                if sm:
-                    scanner["severity"] = sm.group(1)
-                rm = re.search(r"(?m)^\s+ruleset:\s*(\S+)", block)
-                if rm:
-                    scanner["ruleset"] = rm.group(1)
-                tm = re.search(r"(?m)^\s+timeout:\s*(\d+)", block)
-                if tm:
-                    scanner["timeout"] = int(tm.group(1))
-                if scanner:
-                    cfg.setdefault("scanners", {})[name] = scanner
+            header = re.search(r"(?m)^\s*" + name + r":\s*$", content)
+            if not header:
+                continue
+            start = header.end()
+            # Find end: next scanner at same indent level or end of content
+            end = len(content)
+            for other in scanner_names:
+                if other == name:
+                    continue
+                other_match = re.search(r"(?m)^\s*" + other + r":\s*$", content[start:])
+                if other_match:
+                    end = min(end, start + other_match.start())
+            block = content[start:end]
+            scanner = {}
+            em = re.search(r"(?m)^\s+enabled:\s*(true|false)", block)
+            if em:
+                scanner["enabled"] = em.group(1) == "true"
+            sm = re.search(r"(?m)^\s+severity:\s*(\S+)", block)
+            if sm:
+                scanner["severity"] = sm.group(1)
+            rm = re.search(r"(?m)^\s+ruleset:\s*(\S+)", block)
+            if rm:
+                scanner["ruleset"] = rm.group(1)
+            tm = re.search(r"(?m)^\s+timeout:\s*(\d+)", block)
+            if tm:
+                scanner["timeout"] = int(tm.group(1))
+            if scanner:
+                cfg.setdefault("scanners", {})[name] = scanner
         # Warn if advanced fields present without PyYAML
         has_advanced = any(
             re.search(r"(?m)^\s+" + f, content)
