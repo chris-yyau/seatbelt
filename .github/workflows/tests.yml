@@ -8,7 +8,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
@@ -23,6 +26,27 @@ jobs:
         run: bash tests/run-tests.sh
 
   shellcheck:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Install shellcheck (macOS)
+        if: runner.os == 'macOS'
+        run: brew install shellcheck
+      - name: Run shellcheck
+        run: shellcheck hooks/scripts/scan-*.sh hooks/scripts/lib/*.sh scripts/doctor.sh
+
+  integration:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -34,8 +58,52 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - name: Run shellcheck
-        run: shellcheck hooks/scripts/scan-*.sh hooks/scripts/lib/*.sh scripts/doctor.sh
+      - name: Install scanners
+        run: |
+          # gitleaks
+          GITLEAKS_VERSION=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz -C /usr/local/bin gitleaks
+          # shellcheck (pre-installed on ubuntu-latest, verify)
+          shellcheck --version
+      - name: Integration test — gitleaks detects staged secrets
+        run: |
+          cd "$(mktemp -d)"
+          git init -q && git config user.email "ci@test" && git config user.name "CI"
+          echo 'AKIAIOSFODNN7EXAMPLE' > secret.txt
+          git add secret.txt
+          OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || EXIT=$?
+          if [ "${EXIT:-0}" -ne 1 ]; then
+            echo "FAIL: gitleaks should have found the secret (exit=$EXIT)"
+            exit 1
+          fi
+          echo "PASS: gitleaks detected staged secret"
+      - name: Integration test — shellcheck detects issues in staged .sh
+        run: |
+          cd "$(mktemp -d)"
+          git init -q && git config user.email "ci@test" && git config user.name "CI"
+          printf '#!/bin/bash\necho $UNQUOTED_VAR\n' > bad.sh
+          git add bad.sh
+          git show ":bad.sh" > /tmp/bad.sh
+          OUTPUT=$(shellcheck --format=json1 /tmp/bad.sh 2>&1) || true
+          COUNT=$(echo "$OUTPUT" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('comments',[])))" 2>/dev/null)
+          if [ "$COUNT" -lt 1 ]; then
+            echo "FAIL: shellcheck should have found issues (count=$COUNT)"
+            exit 1
+          fi
+          echo "PASS: shellcheck found $COUNT issue(s) — JSON parsing works"
+      - name: Integration test — doctor.sh outputs valid JSON
+        run: |
+          OUTPUT=$(bash scripts/doctor.sh 2>/dev/null)
+          echo "$OUTPUT" | python3 -m json.tool > /dev/null
+          echo "PASS: doctor.sh JSON is valid"
+          # Verify gitleaks shows as installed
+          echo "$OUTPUT" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          assert d['gitleaks']['installed'] == True, 'gitleaks should be installed'
+          assert d['shellcheck']['installed'] == True, 'shellcheck should be installed'
+          print('PASS: doctor correctly detects installed scanners')
+          "
 
   commitlint:
     if: github.event_name == 'pull_request'
