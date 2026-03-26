@@ -72,7 +72,7 @@ jobs:
           # gitleaks --staged needs at least one commit to diff against
           echo "init" > init.txt && git add init.txt && git commit -q -m "init"
           # Use a private key pattern which gitleaks reliably detects
-          printf '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0Z3VS5JJcds3xfn\n-----END RSA PRIVATE KEY-----\n' > secret.txt
+          printf '%s\n' '-----BEGIN RSA PRIVATE KEY-----' 'MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn' '-----END RSA PRIVATE KEY-----' > secret.txt
           git add secret.txt
           OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || EXIT=$?
           if [ "${EXIT:-0}" -ne 1 ]; then
