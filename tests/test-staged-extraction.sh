@@ -71,7 +71,7 @@ run_hook_in_repo() {
         PATH="$path_prefix:$PATH"
     fi
 
-    (cd "$repo" && cat "$fixture" | bash "$PROJECT_ROOT/hooks/scripts/$script" >"$tmpout" 2>"$tmperr") || true
+    (cd "$repo" && bash "$PROJECT_ROOT/hooks/scripts/$script" <"$fixture" >"$tmpout" 2>"$tmperr") || true
 
     PATH="$old_path"
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)

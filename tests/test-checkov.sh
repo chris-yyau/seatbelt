@@ -44,7 +44,7 @@ test_checkov_degraded_mode() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit.json" | bash "$CHECKOV_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$CHECKOV_SCRIPT" <"$FIXTURES_DIR/git-commit.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
@@ -67,7 +67,7 @@ test_checkov_detects_chained_commit() {
     tmperr=$(mktemp)
     (
         export PATH="$tmpbin"
-        cat "$FIXTURES_DIR/git-commit-chained.json" | bash "$CHECKOV_SCRIPT" >"$tmpout" 2>"$tmperr"
+        bash "$CHECKOV_SCRIPT" <"$FIXTURES_DIR/git-commit-chained.json" >"$tmpout" 2>"$tmperr"
     ) || EXIT_CODE=$?
     STDOUT=$(cat "$tmpout" 2>/dev/null || true)
     STDERR=$(cat "$tmperr" 2>/dev/null || true)
