@@ -24,9 +24,6 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
-# commitlint is not in the standard config.sh scanner list, so we handle
-# the env var directly with a default of "true" (enabled).
-SEATBELT_COMMITLINT_ENABLED="${SEATBELT_COMMITLINT_ENABLED:-true}"
 [ "$SEATBELT_COMMITLINT_ENABLED" = "false" ] && exit 0
 
 # ── Extract commit message from HOOK_DATA ─────────────────────────
@@ -53,9 +50,19 @@ try:
             tokens = tokens[1:]
         if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
             # Check for --fixup, --squash, -F/--file (skip validation)
-            for t in tokens[2:]:
-                if t in ('--fixup', '--squash', '-F', '--file'):
+            # Process tokens sequentially: skip flags consume their argument
+            skip_tokens = set()
+            j = 2
+            while j < len(tokens):
+                t = tokens[j]
+                if t in ('--fixup', '--squash', '--file', '-F'):
                     sys.exit(0)
+                if t.startswith('--file=') or t.startswith('--fixup=') or t.startswith('--squash='):
+                    sys.exit(0)
+                # -F<path> (attached form): exactly -F followed by path chars
+                if len(t) > 2 and t[:2] == '-F' and not t[2:].startswith('-'):
+                    sys.exit(0)
+                j += 1
             # Find -m or --message
             msgs = []
             i = 2
