@@ -6,18 +6,6 @@
 set -euo pipefail
 trap 'exit 0' ERR  # fail-open on script errors
 
-# ── Block emission helper ────────────────────────────────────────────
-block_emit() {
-    local reason="$1"
-    if command -v jq &>/dev/null; then
-        jq -n --arg r "$reason" '{"decision":"block","reason":$r}'
-    else
-        local escaped
-        escaped=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | head -c 2000)
-        printf '{"decision":"block","reason":"%s"}\n' "$escaped"
-    fi
-}
-
 # ── Skip overrides ──────────────────────────────────────────────────
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 [ "${SKIP_CHECKOV:-0}" = "1" ] && exit 0
@@ -34,10 +22,16 @@ fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 
+# ── Clean stale results from a previous blocked commit ───────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/result-dir.sh"
+
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_CHECKOV_ENABLED" = "false" ] && exit 0
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
 
 # ── checkov availability ────────────────────────────────────────────
 CHECKOV_CMD=""
@@ -162,7 +156,7 @@ $(printf '%b' "$BLOCK_DETAILS")
 Fix: Address the failed checks listed above.
 False positive? Add #checkov:skip=CKV_XXX:reason above the affected line
 Bypass once: export SKIP_CHECKOV=1 in your shell, then retry"
-    block_emit "$REASON"
+    block_emit "checkov" "$REASON"
 fi
 
 exit 0

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Seatbelt: scan staged GitHub Actions workflows for security issues before git commit
-# Scanner: zizmor | Fail mode: warn only (never blocks)
+# Scanner: zizmor | Fail mode: warn only (blocks when severity threshold configured)
 # Skip: SKIP_ZIZMOR=1 or SKIP_SEATBELT=1
 
 set -euo pipefail
@@ -34,6 +34,12 @@ source "$LIB_DIR/result-dir.sh"
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_ZIZMOR_ENABLED" = "false" ] && exit 0
 rm -f "$SEATBELT_RESULT_DIR/zizmor"
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
+# Validate severity threshold if configured
+if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
+    _seatbelt_validate_severity "zizmor" "$SEATBELT_ZIZMOR_SEVERITY" "low,medium,high" || SEATBELT_ZIZMOR_SEVERITY=""
+fi
 
 # ── zizmor availability ─────────────────────────────────────────────
 if ! command -v zizmor &>/dev/null; then
@@ -122,6 +128,36 @@ except Exception:
             # Write result for summary aggregation (append: multiple workflows may have findings)
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${FINDING_COUNT} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
+
+            # Severity gating: if threshold configured, check if any finding meets it
+            if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
+                _zizmor_has_blocking=$(printf '%s' "$SCAN_OUTPUT" | SEATBELT_ZIZMOR_SEVERITY="$SEATBELT_ZIZMOR_SEVERITY" python3 -c "
+import sys, json, os
+try:
+    data = json.load(sys.stdin)
+    if not isinstance(data, list):
+        sys.exit(0)
+    threshold = os.environ.get('SEATBELT_ZIZMOR_SEVERITY', '').lower()
+    scale = ['low', 'medium', 'high']
+    if threshold not in scale:
+        sys.exit(0)
+    ti = scale.index(threshold)
+    for f in data:
+        det = f.get('determinations', {})
+        sev = (det.get('severity', '') if isinstance(det, dict) else '').lower()
+        if not sev:
+            sev = f.get('severity', '').lower()
+        if sev in scale and scale.index(sev) >= ti:
+            print('yes')
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null || true)
+                if [ "$_zizmor_has_blocking" = "yes" ]; then
+                    block_emit "zizmor" "${FINDING_COUNT} issue(s) at or above ${SEATBELT_ZIZMOR_SEVERITY} severity in $(basename "$wf")"
+                fi
+                unset _zizmor_has_blocking
+            fi
         fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)

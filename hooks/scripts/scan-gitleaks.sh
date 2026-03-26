@@ -6,18 +6,6 @@
 set -euo pipefail
 trap 'exit 0' ERR  # fail-open on script errors
 
-# ── Block emission helper ────────────────────────────────────────────
-block_emit() {
-    local reason="$1"
-    if command -v jq &>/dev/null; then
-        jq -n --arg r "$reason" '{"decision":"block","reason":$r}'
-    else
-        local escaped
-        escaped=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | head -c 2000)
-        printf '{"decision":"block","reason":"%s"}\n' "$escaped"
-    fi
-}
-
 # ── Skip overrides ──────────────────────────────────────────────────
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 [ "${SKIP_GITLEAKS:-0}" = "1" ] && exit 0
@@ -45,6 +33,8 @@ rm -rf "$SEATBELT_RESULT_DIR"
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_GITLEAKS_ENABLED" = "false" ] && exit 0
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
 
 # ── gitleaks availability ───────────────────────────────────────────
 if ! command -v gitleaks &>/dev/null; then
@@ -71,7 +61,7 @@ ${TRUNCATED}
 Fix: Remove the secret from staged files. Use environment variables or a secret manager.
 False positive? Add the fingerprint to .gitleaksignore
 Bypass once: export SKIP_GITLEAKS=1 in your shell, then retry"
-    block_emit "$REASON"
+    block_emit "gitleaks" "$REASON"
     exit 0
 fi
 
