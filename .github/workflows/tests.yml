@@ -69,6 +69,8 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           git init -q && git config user.email "ci@test" && git config user.name "CI"
+          # gitleaks --staged needs at least one commit to diff against
+          echo "init" > init.txt && git add init.txt && git commit -q -m "init"
           # Use a GitHub PAT pattern (ghp_ prefix) which gitleaks reliably detects
           echo 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh' > secret.txt
           git add secret.txt
