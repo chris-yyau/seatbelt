@@ -6,18 +6,6 @@
 set -euo pipefail
 trap 'exit 0' ERR  # fail-open on script errors
 
-# ── Block emission helper ────────────────────────────────────────────
-block_emit() {
-    local reason="$1"
-    if command -v jq &>/dev/null; then
-        jq -n --arg r "$reason" '{"decision":"block","reason":$r}'
-    else
-        local escaped
-        escaped=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | head -c 2000)
-        printf '{"decision":"block","reason":"%s"}\n' "$escaped"
-    fi
-}
-
 # ── Skip overrides ──────────────────────────────────────────────────
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 [ "${SKIP_GITLEAKS:-0}" = "1" ] && exit 0
@@ -45,6 +33,8 @@ rm -rf "$SEATBELT_RESULT_DIR"
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_GITLEAKS_ENABLED" = "false" ] && exit 0
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
 
 # ── gitleaks availability ───────────────────────────────────────────
 if ! command -v gitleaks &>/dev/null; then
@@ -52,12 +42,32 @@ if ! command -v gitleaks &>/dev/null; then
     exit 0
 fi
 
+# ── Portable timeout (config-driven, no default for gitleaks) ─────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_GITLEAKS_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_GITLEAKS_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_GITLEAKS_TIMEOUT"
+    fi
+fi
+
 # ── Run gitleaks ────────────────────────────────────────────────────
 GITLEAKS_EXIT=0
-GITLEAKS_OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || GITLEAKS_EXIT=$?
+if [ -n "$TIMEOUT_CMD" ]; then
+    GITLEAKS_OUTPUT=$($TIMEOUT_CMD gitleaks protect --staged --no-banner 2>&1) || GITLEAKS_EXIT=$?
+else
+    GITLEAKS_OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || GITLEAKS_EXIT=$?
+fi
 
 # Exit 0 = clean
 [ "$GITLEAKS_EXIT" -eq 0 ] && exit 0
+
+# Timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+if [ "$GITLEAKS_EXIT" -eq 124 ] || [ "$GITLEAKS_EXIT" -eq 137 ]; then
+    echo "SEATBELT DEGRADED: gitleaks timed out after ${SEATBELT_GITLEAKS_TIMEOUT:-?}s — scan skipped" >&2
+    exit 0
+fi
 
 # Exit 1 = findings → BLOCK
 if [ "$GITLEAKS_EXIT" -eq 1 ]; then
@@ -71,7 +81,12 @@ ${TRUNCATED}
 Fix: Remove the secret from staged files. Use environment variables or a secret manager.
 False positive? Add the fingerprint to .gitleaksignore
 Bypass once: export SKIP_GITLEAKS=1 in your shell, then retry"
-    block_emit "$REASON"
+    block_emit "gitleaks" "$REASON"
+    # Write advisory result file for summary when strict=false (block_emit only warns)
+    if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
+        mkdir -p "$SEATBELT_RESULT_DIR"
+        echo "1 finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/gitleaks"
+    fi
     exit 0
 fi
 

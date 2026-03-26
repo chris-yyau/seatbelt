@@ -54,12 +54,14 @@ done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null || true
 SCAN_DIR=$(mktemp -d)
 trap 'rm -rf "$SCAN_DIR"' EXIT
 
-# ── Portable timeout ───────────────────────────────────────────────
+# ── Portable timeout (config-driven) ─────────────────────────────
 TIMEOUT_CMD=""
-if command -v timeout &>/dev/null; then
-    TIMEOUT_CMD="timeout 30"
-elif command -v gtimeout &>/dev/null; then
-    TIMEOUT_CMD="gtimeout 30"
+if [ -n "${SEATBELT_SHELLCHECK_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_SHELLCHECK_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_SHELLCHECK_TIMEOUT"
+    fi
 fi
 
 EXTRACTED=0

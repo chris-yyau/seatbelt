@@ -1,0 +1,10 @@
+scanners:
+  trivy:
+    enabled: true
+    severity: CRITICAL
+  semgrep:
+    enabled: true
+    severity: error
+  zizmor:
+    enabled: true
+    severity: high

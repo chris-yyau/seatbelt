@@ -6,18 +6,6 @@
 set -euo pipefail
 trap 'exit 0' ERR  # fail-open on script errors
 
-# ── Block emission helper ────────────────────────────────────────────
-block_emit() {
-    local reason="$1"
-    if command -v jq &>/dev/null; then
-        jq -n --arg r "$reason" '{"decision":"block","reason":$r}'
-    else
-        local escaped
-        escaped=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | head -c 2000)
-        printf '{"decision":"block","reason":"%s"}\n' "$escaped"
-    fi
-}
-
 # ── Skip overrides ──────────────────────────────────────────────────
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 [ "${SKIP_CHECKOV:-0}" = "1" ] && exit 0
@@ -34,10 +22,17 @@ fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 
+# ── Clean stale results from a previous blocked commit ───────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/result-dir.sh"
+
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_CHECKOV_ENABLED" = "false" ] && exit 0
+rm -f "$SEATBELT_RESULT_DIR/checkov"
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
 
 # ── checkov availability ────────────────────────────────────────────
 CHECKOV_CMD=""
@@ -61,7 +56,18 @@ fi
 SCAN_DIR=$(mktemp -d)
 trap 'rm -rf "$SCAN_DIR"' EXIT
 
+# ── Portable timeout (config-driven, no default for checkov) ─────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_CHECKOV_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_CHECKOV_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_CHECKOV_TIMEOUT"
+    fi
+fi
+
 BLOCKED=0
+BLOCKED_COUNT=0
 BLOCK_DETAILS=""
 EXTRACTED=0
 EXPECTED=0
@@ -88,7 +94,19 @@ while IFS= read -r -d '' staged_file; do
     git show ":$staged_file" > "$SCAN_DIR/$staged_file" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
+    SCAN_EXIT=0
+    if [ -n "$TIMEOUT_CMD" ]; then
+        # shellcheck disable=SC2086
+        SCAN_OUTPUT=$($TIMEOUT_CMD $CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || SCAN_EXIT=$?
+    else
+        SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || SCAN_EXIT=$?
+    fi
+
+    # Detect timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+    if [ "$SCAN_EXIT" -eq 124 ] || [ "$SCAN_EXIT" -eq 137 ]; then
+        echo "SEATBELT DEGRADED: checkov timed out after ${SEATBELT_CHECKOV_TIMEOUT}s on $(basename "$staged_file")" >&2
+        continue
+    fi
 
     # Parse JSON for findings
     FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
@@ -133,6 +151,7 @@ except Exception:
 
         if [ "$FAILED" -gt 0 ]; then
             BLOCKED=1
+            BLOCKED_COUNT=$((BLOCKED_COUNT + FAILED))
             BLOCK_DETAILS="${BLOCK_DETAILS}$(echo "$SCAN_OUTPUT" | grep "FAILED" | head -3)\n"
         elif [ "$PARSE_ERRORS" -gt 0 ]; then
             echo "SEATBELT: checkov parse error in $(basename "$staged_file") — skipping" >&2
@@ -140,6 +159,7 @@ except Exception:
     else
         if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
             BLOCKED=1
+            BLOCKED_COUNT=$((BLOCKED_COUNT + FINDING_COUNT))
             BLOCK_DETAILS="${BLOCK_DETAILS}${FINDING_SUMMARY}\n"
         fi
     fi
@@ -162,7 +182,12 @@ $(printf '%b' "$BLOCK_DETAILS")
 Fix: Address the failed checks listed above.
 False positive? Add #checkov:skip=CKV_XXX:reason above the affected line
 Bypass once: export SKIP_CHECKOV=1 in your shell, then retry"
-    block_emit "$REASON"
+    block_emit "checkov" "$REASON"
+    # Write advisory result file for summary when strict=false (block_emit only warns)
+    if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
+        mkdir -p "$SEATBELT_RESULT_DIR"
+        echo "${BLOCKED_COUNT} finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/checkov"
+    fi
 fi
 
 exit 0

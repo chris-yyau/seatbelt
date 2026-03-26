@@ -1,0 +1,7 @@
+scanners:
+  trivy:
+    enabled: true
+    severity: MEDIUM
+  semgrep:
+    enabled: true
+    severity: typo

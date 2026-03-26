@@ -1,0 +1,4 @@
+scanners:
+  semgrep:
+    enabled: true
+    ruleset: p/owasp-top-ten

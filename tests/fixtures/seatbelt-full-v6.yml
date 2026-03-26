@@ -1,0 +1,26 @@
+strict: true
+scanners:
+  gitleaks:
+    enabled: true
+  checkov:
+    enabled: true
+    timeout: 60
+  trivy:
+    enabled: true
+    severity: CRITICAL
+    timeout: 45
+  semgrep:
+    enabled: true
+    severity: error
+    ruleset: p/owasp-top-ten
+    timeout: 90
+  zizmor:
+    enabled: true
+    severity: high
+  shellcheck:
+    enabled: true
+    timeout: 15
+  commitlint:
+    enabled: true
+  signing:
+    enabled: true

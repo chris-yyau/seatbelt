@@ -1,0 +1,6 @@
+strict: false
+scanners:
+  gitleaks:
+    enabled: true
+  checkov:
+    enabled: true

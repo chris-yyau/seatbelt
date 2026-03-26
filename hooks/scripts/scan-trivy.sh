@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Seatbelt: scan staged lock files for dependency CVEs before git commit
-# Scanner: trivy | Fail mode: warn only (never blocks)
+# Scanner: trivy | Fail mode: warn only (blocks when severity threshold configured)
 # Skip: SKIP_TRIVY=1 or SKIP_SEATBELT=1
 
 set -euo pipefail
@@ -34,6 +34,12 @@ source "$LIB_DIR/result-dir.sh"
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_TRIVY_ENABLED" = "false" ] && exit 0
 rm -f "$SEATBELT_RESULT_DIR/trivy"
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
+# Validate severity threshold if configured
+if [ -n "${SEATBELT_TRIVY_SEVERITY:-}" ]; then
+    _seatbelt_validate_severity "trivy" "$SEATBELT_TRIVY_SEVERITY" "HIGH,CRITICAL" || SEATBELT_TRIVY_SEVERITY=""
+fi
 
 # ── trivy availability ──────────────────────────────────────────────
 if ! command -v trivy &>/dev/null; then
@@ -72,16 +78,19 @@ if [ ! -d "$TRIVY_CACHE" ] || [ -z "$(ls -A "$TRIVY_CACHE" 2>/dev/null)" ]; then
     exit 0
 fi
 
-# ── Portable timeout ───────────────────────────────────────────────
+# ── Portable timeout (config-driven) ─────────────────────────────
 TIMEOUT_CMD=""
-if command -v timeout &>/dev/null; then
-    TIMEOUT_CMD="timeout 30"
-elif command -v gtimeout &>/dev/null; then
-    TIMEOUT_CMD="gtimeout 30"
+if [ -n "${SEATBELT_TRIVY_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_TRIVY_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_TRIVY_TIMEOUT"
+    fi
 fi
 
 EXTRACTED=0
 EXPECTED=0
+_TRIVY_BLOCK_REASONS=""
 while IFS= read -r -d '' lf; do
     [ -z "$lf" ] && continue
 
@@ -153,6 +162,32 @@ except Exception:
             # Write result for summary aggregation (append: multiple lockfiles may have findings)
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${FINDING_COUNT} vulnerabilit$([ "$FINDING_COUNT" -eq 1 ] && echo 'y' || echo 'ies') in $(basename "$lf")" >> "$SEATBELT_RESULT_DIR/trivy"
+
+            # Severity gating: if threshold configured, check if any finding meets it
+            if [ -n "${SEATBELT_TRIVY_SEVERITY:-}" ]; then
+                _trivy_has_blocking=$(printf '%s' "$SCAN_OUTPUT" | SEATBELT_TRIVY_SEVERITY="$SEATBELT_TRIVY_SEVERITY" python3 -c "
+import sys, json, os
+try:
+    data = json.load(sys.stdin)
+    threshold = os.environ.get('SEATBELT_TRIVY_SEVERITY', '').upper()
+    scale = ['HIGH', 'CRITICAL']
+    if threshold not in scale:
+        sys.exit(0)
+    ti = scale.index(threshold)
+    for result in data.get('Results', []) or []:
+        for v in result.get('Vulnerabilities') or []:
+            sev = v.get('Severity', '').upper()
+            if sev in scale and scale.index(sev) >= ti:
+                print('yes')
+                sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null || true)
+                if [ "$_trivy_has_blocking" = "yes" ]; then
+                    _TRIVY_BLOCK_REASONS="${_TRIVY_BLOCK_REASONS}${FINDING_COUNT} finding(s) in $(basename "$lf"); "
+                fi
+                unset _trivy_has_blocking
+            fi
         fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
@@ -161,6 +196,11 @@ done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
 if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
     echo "SEATBELT: trivy: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
+
+# Emit a single block decision after scanning all files (hook protocol expects one JSON)
+if [ -n "$_TRIVY_BLOCK_REASONS" ]; then
+    block_emit "trivy" "Vulnerability findings at or above ${SEATBELT_TRIVY_SEVERITY} severity — ${_TRIVY_BLOCK_REASONS%%; }"
 fi
 
 exit 0

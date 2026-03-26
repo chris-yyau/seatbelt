@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Seatbelt: scan staged source files for security vulnerabilities before git commit
-# Scanner: semgrep | Fail mode: warn only (never blocks)
+# Scanner: semgrep | Fail mode: warn only (blocks when severity threshold configured)
 # Skip: SKIP_SEMGREP=1 or SKIP_SEATBELT=1
 
 set -euo pipefail
@@ -34,6 +34,13 @@ rm -f "$SEATBELT_RESULT_DIR/semgrep"
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_SEMGREP_ENABLED" = "false" ] && exit 0
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
+# Validate severity threshold if configured
+if [ -n "${SEATBELT_SEMGREP_SEVERITY:-}" ]; then
+    _seatbelt_validate_severity "semgrep" "$SEATBELT_SEMGREP_SEVERITY" "info,warning,error" || SEATBELT_SEMGREP_SEVERITY=""
+fi
+SEMGREP_RULESET="${SEATBELT_SEMGREP_RULESET:-p/security-audit}"
 
 # ── semgrep availability ──────────────────────────────────────────
 if ! command -v semgrep &>/dev/null; then
@@ -45,12 +52,14 @@ fi
 SCAN_DIR=$(mktemp -d)
 trap 'rm -rf "$SCAN_DIR"' EXIT
 
-# ── Portable timeout ────────────────────────────────────────────
+# ── Portable timeout (config-driven) ────────────────────────────
 TIMEOUT_CMD=""
-if command -v timeout &>/dev/null; then
-    TIMEOUT_CMD="timeout 60"
-elif command -v gtimeout &>/dev/null; then
-    TIMEOUT_CMD="gtimeout 60"
+if [ -n "${SEATBELT_SEMGREP_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_SEMGREP_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_SEMGREP_TIMEOUT"
+    fi
 fi
 
 EXTRACTED=0
@@ -84,10 +93,31 @@ fi
 
 # ── Run semgrep scan ─────────────────────────────────────────────
 SCAN_OUTPUT=""
+SCAN_STDERR_FILE="$SCAN_DIR/.semgrep_stderr"
+SCAN_EXIT=0
 if [ -n "$TIMEOUT_CMD" ]; then
-    SCAN_OUTPUT=$($TIMEOUT_CMD semgrep scan --config p/security-audit --json --quiet "$SCAN_DIR" 2>/dev/null) || true
+    SCAN_OUTPUT=$($TIMEOUT_CMD semgrep scan --config "$SEMGREP_RULESET" --json --quiet "$SCAN_DIR" 2>"$SCAN_STDERR_FILE") || SCAN_EXIT=$?
 else
-    SCAN_OUTPUT=$(semgrep scan --config p/security-audit --json --quiet "$SCAN_DIR" 2>/dev/null) || true
+    SCAN_OUTPUT=$(semgrep scan --config "$SEMGREP_RULESET" --json --quiet "$SCAN_DIR" 2>"$SCAN_STDERR_FILE") || SCAN_EXIT=$?
+fi
+
+# Detect timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+if [ "$SCAN_EXIT" -eq 124 ] || [ "$SCAN_EXIT" -eq 137 ]; then
+    echo "SEATBELT DEGRADED: semgrep timed out after ${SEATBELT_SEMGREP_TIMEOUT}s — scan skipped" >&2
+    exit 0
+fi
+
+# Check for invalid ruleset or other CLI failure with no JSON output
+if [ -z "$SCAN_OUTPUT" ] && [ -f "$SCAN_STDERR_FILE" ]; then
+    if grep -qiE '(invalid|not found|error.*config|could not resolve)' "$SCAN_STDERR_FILE" 2>/dev/null; then
+        echo "SEATBELT DEGRADED: semgrep invalid ruleset '${SEMGREP_RULESET}' — scan skipped" >&2
+        exit 0
+    fi
+    # Non-zero exit with no JSON and no known error pattern — CLI failure
+    if [ "$SCAN_EXIT" -ne 0 ]; then
+        echo "SEATBELT DEGRADED: semgrep exited with code ${SCAN_EXIT} — scan skipped" >&2
+        exit 0
+    fi
 fi
 
 # ── Parse JSON for findings ──────────────────────────────────────
@@ -127,6 +157,31 @@ elif [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
     # Write result for summary aggregation
     mkdir -p "$SEATBELT_RESULT_DIR"
     echo "${FINDING_COUNT} finding(s)" > "$SEATBELT_RESULT_DIR/semgrep"
+
+    # Severity gating: if threshold configured, check if any finding meets it
+    if [ -n "${SEATBELT_SEMGREP_SEVERITY:-}" ]; then
+        _semgrep_has_blocking=$(printf '%s' "$SCAN_OUTPUT" | SEATBELT_SEMGREP_SEVERITY="$SEATBELT_SEMGREP_SEVERITY" python3 -c "
+import sys, json, os
+try:
+    data = json.load(sys.stdin)
+    threshold = os.environ.get('SEATBELT_SEMGREP_SEVERITY', '').lower()
+    scale = ['info', 'warning', 'error']
+    if threshold not in scale:
+        sys.exit(0)
+    ti = scale.index(threshold)
+    for r in data.get('results', []) or []:
+        sev = r.get('extra', {}).get('severity', '').lower()
+        if sev in scale and scale.index(sev) >= ti:
+            print('yes')
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null || true)
+        if [ "$_semgrep_has_blocking" = "yes" ]; then
+            block_emit "semgrep" "${FINDING_COUNT} finding(s) at or above ${SEATBELT_SEMGREP_SEVERITY} severity"
+        fi
+        unset _semgrep_has_blocking
+    fi
 fi
 
 exit 0

@@ -1,0 +1,13 @@
+scanners:
+  trivy:
+    enabled: true
+    timeout: 45
+  semgrep:
+    enabled: true
+    timeout: 90
+  shellcheck:
+    enabled: true
+    timeout: 15
+  checkov:
+    enabled: true
+    timeout: 60

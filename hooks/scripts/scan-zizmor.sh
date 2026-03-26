@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Seatbelt: scan staged GitHub Actions workflows for security issues before git commit
-# Scanner: zizmor | Fail mode: warn only (never blocks)
+# Scanner: zizmor | Fail mode: warn only (blocks when severity threshold configured)
 # Skip: SKIP_ZIZMOR=1 or SKIP_SEATBELT=1
 
 set -euo pipefail
@@ -34,6 +34,12 @@ source "$LIB_DIR/result-dir.sh"
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_ZIZMOR_ENABLED" = "false" ] && exit 0
 rm -f "$SEATBELT_RESULT_DIR/zizmor"
+# shellcheck disable=SC1091
+source "$LIB_DIR/block-emit.sh"
+# Validate severity threshold if configured
+if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
+    _seatbelt_validate_severity "zizmor" "$SEATBELT_ZIZMOR_SEVERITY" "low,medium,high" || SEATBELT_ZIZMOR_SEVERITY=""
+fi
 
 # ── zizmor availability ─────────────────────────────────────────────
 if ! command -v zizmor &>/dev/null; then
@@ -47,6 +53,7 @@ trap 'rm -rf "$SCAN_DIR"' EXIT
 
 EXTRACTED=0
 EXPECTED=0
+_ZIZMOR_BLOCK_REASONS=""
 while IFS= read -r -d '' wf; do
     [ -z "$wf" ] && continue
 
@@ -63,7 +70,29 @@ while IFS= read -r -d '' wf; do
     git show ":$wf" > "$SCAN_DIR/$wf" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    SCAN_OUTPUT=$(zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || true
+    # ── Portable timeout for zizmor ─────────────────────────────────
+    _ZIZMOR_TIMEOUT_CMD=""
+    if [ -n "${SEATBELT_ZIZMOR_TIMEOUT:-}" ]; then
+        if command -v timeout &>/dev/null; then
+            _ZIZMOR_TIMEOUT_CMD="timeout $SEATBELT_ZIZMOR_TIMEOUT"
+        elif command -v gtimeout &>/dev/null; then
+            _ZIZMOR_TIMEOUT_CMD="gtimeout $SEATBELT_ZIZMOR_TIMEOUT"
+        fi
+    fi
+
+    _ZIZMOR_EXIT=0
+    if [ -n "$_ZIZMOR_TIMEOUT_CMD" ]; then
+        # shellcheck disable=SC2086
+        SCAN_OUTPUT=$($_ZIZMOR_TIMEOUT_CMD zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
+    else
+        SCAN_OUTPUT=$(zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
+    fi
+
+    # Detect timeout
+    if [ "$_ZIZMOR_EXIT" -eq 124 ] || [ "$_ZIZMOR_EXIT" -eq 137 ]; then
+        echo "SEATBELT DEGRADED: zizmor timed out after ${SEATBELT_ZIZMOR_TIMEOUT}s on $(basename "$wf")" >&2
+        continue
+    fi
 
     # Parse JSON for findings
     # zizmor v1 JSON schema: top-level array with ident, determinations.severity,
@@ -108,6 +137,21 @@ except Exception:
             # Write result for summary aggregation (append: multiple workflows may have findings)
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
+
+            # Severity gating on text fallback: match severity labels in output
+            if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
+                _sev_lower=$(printf '%s' "$SEATBELT_ZIZMOR_SEVERITY" | tr '[:upper:]' '[:lower:]')
+                _has_blocking_text=""
+                case "$_sev_lower" in
+                    low)    echo "$SCAN_OUTPUT" | grep -qE '(warning|error)\[' && _has_blocking_text="yes" ;;
+                    medium) echo "$SCAN_OUTPUT" | grep -qE '(warning|error)\[' && _has_blocking_text="yes" ;;
+                    high)   echo "$SCAN_OUTPUT" | grep -qE 'error\[' && _has_blocking_text="yes" ;;
+                esac
+                if [ "$_has_blocking_text" = "yes" ]; then
+                    _ZIZMOR_BLOCK_REASONS="${_ZIZMOR_BLOCK_REASONS}${HITS} issue(s) in $(basename "$wf"); "
+                fi
+                unset _sev_lower _has_blocking_text
+            fi
         elif [ -n "$SCAN_OUTPUT" ]; then
             # Non-empty output that is neither JSON nor text findings — likely a CLI error
             # (e.g. --format json unsupported). Emit a degraded warning rather than silently skip.
@@ -122,6 +166,36 @@ except Exception:
             # Write result for summary aggregation (append: multiple workflows may have findings)
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${FINDING_COUNT} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
+
+            # Severity gating: if threshold configured, check if any finding meets it
+            if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
+                _zizmor_has_blocking=$(printf '%s' "$SCAN_OUTPUT" | SEATBELT_ZIZMOR_SEVERITY="$SEATBELT_ZIZMOR_SEVERITY" python3 -c "
+import sys, json, os
+try:
+    data = json.load(sys.stdin)
+    if not isinstance(data, list):
+        sys.exit(0)
+    threshold = os.environ.get('SEATBELT_ZIZMOR_SEVERITY', '').lower()
+    scale = ['low', 'medium', 'high']
+    if threshold not in scale:
+        sys.exit(0)
+    ti = scale.index(threshold)
+    for f in data:
+        det = f.get('determinations', {})
+        sev = (det.get('severity', '') if isinstance(det, dict) else '').lower()
+        if not sev:
+            sev = f.get('severity', '').lower()
+        if sev in scale and scale.index(sev) >= ti:
+            print('yes')
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null || true)
+                if [ "$_zizmor_has_blocking" = "yes" ]; then
+                    _ZIZMOR_BLOCK_REASONS="${_ZIZMOR_BLOCK_REASONS}${FINDING_COUNT} issue(s) in $(basename "$wf"); "
+                fi
+                unset _zizmor_has_blocking
+            fi
         fi
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
@@ -130,6 +204,11 @@ done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
 if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
     echo "SEATBELT: zizmor: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
+
+# Emit a single block decision after scanning all files (hook protocol expects one JSON)
+if [ -n "$_ZIZMOR_BLOCK_REASONS" ]; then
+    block_emit "zizmor" "Issues at or above ${SEATBELT_ZIZMOR_SEVERITY} severity — ${_ZIZMOR_BLOCK_REASONS%%; }"
 fi
 
 exit 0
