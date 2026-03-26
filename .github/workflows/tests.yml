@@ -71,12 +71,22 @@ jobs:
           git init -q && git config user.email "ci@test" && git config user.name "CI"
           # gitleaks --staged needs at least one commit to diff against
           echo "init" > init.txt && git add init.txt && git commit -q -m "init"
-          # Use a private key pattern which gitleaks reliably detects
-          printf '%s\n' '-----BEGIN RSA PRIVATE KEY-----' 'MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn' '-----END RSA PRIVATE KEY-----' > secret.txt
+          # Use a realistic private key pattern (full base64 block)
+          cat > secret.txt << 'KEYEOF'
+          -----BEGIN RSA PRIVATE KEY-----
+          MIIEpAIBAAKCAQEA04up8hoqzS1+APIB0RhjXyObwHQnOzhAk4Aii7fISKERJXRT
+          S5I7F5sDNtZfAC3sCFZ/RahQh/bVsJFeelNK4qDcnMXFIuJmJEa7IMMJ6MohLfny
+          pcMRmpZ3TQx+c2PnW+lSANSlhMpuzYIWv0PTbK3PVOjfCSr1iB5SGHq+ydBHaYCH
+          jR5JiU0MAigMBHmJumFgV/oE3OfJTZiz6nZZFjOakNq4Z3aHk/dTOPvvaQUxnwLA
+          ye0NGHZ3HMIA25sjReF/AOX0/17HOEsMjNHt6pkd7xYiexKo9VJqMIK7/W5GJ9cM
+          a2MkwRJSzVLNSGdjMVBGNoRt5w5TRGFMxXQS9QIDAQABAKCAQEAojx3VCzILEfV2
+          -----END RSA PRIVATE KEY-----
+          KEYEOF
           git add secret.txt
           OUTPUT=$(gitleaks protect --staged --no-banner 2>&1) || EXIT=$?
           if [ "${EXIT:-0}" -ne 1 ]; then
             echo "FAIL: gitleaks should have found the secret (exit=$EXIT)"
+            echo "OUTPUT: $OUTPUT"
             exit 1
           fi
           echo "PASS: gitleaks detected staged secret"
