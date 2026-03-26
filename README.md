@@ -288,6 +288,23 @@ Add a comment above the affected line in your IaC file:
 #checkov:skip=CKV_DOCKER_3:We use a non-root user in the entrypoint script
 ```
 
+## CI Backstop
+
+Seatbelt catches issues at commit time, but commits made outside Claude Code bypass plugin hooks. Add a `security.yml` GitHub Actions workflow as a CI backstop — defense-in-depth that catches what seatbelt misses.
+
+The workflow runs the same scanners (semgrep, checkov, zizmor, trivy) on push and PR, plus SHA pin verification via `.github/scripts/check-pinned-uses.sh`. Trivy auto-skips if a compliance job already exists in `tests.yml`.
+
+See [`ci-pipeline-setup`](https://github.com/chris-yyau/seatbelt/blob/main/.github/workflows/security.yml) for the reference implementation deployed in this repo.
+
+| Scanner | Local (seatbelt) | CI (security.yml) |
+|---------|-----------------|-------------------|
+| gitleaks | BLOCK | GitGuardian (separate) |
+| checkov | BLOCK | BLOCK |
+| semgrep | WARN | BLOCK |
+| zizmor | WARN | BLOCK + SHA pin check |
+| trivy | WARN | BLOCK (auto-skips if compliance job exists) |
+| shellcheck | WARN | tests.yml |
+
 ## Uninstall
 
 ```bash
