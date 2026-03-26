@@ -247,7 +247,21 @@ _sg_raw="${SEATBELT_SIGNING_ENABLED:-true}"
 [ "$_sg_raw" = "false" ] && SIGNING_ADV_ENABLED="false" || SIGNING_ADV_ENABLED="true"
 unset _cl_raw _sg_raw
 
+# ── v6 config values ────────────────────────────────────────────────
+# Normalize strict to JSON boolean
+_strict_raw="${SEATBELT_STRICT:-true}"
+[ "$_strict_raw" = "true" ] && _strict_val="true" || _strict_val="false"
+unset _strict_raw
+_trivy_sev="${SEATBELT_TRIVY_SEVERITY:-}"
+_semgrep_sev="${SEATBELT_SEMGREP_SEVERITY:-}"
+_zizmor_sev="${SEATBELT_ZIZMOR_SEVERITY:-}"
+_semgrep_ruleset="${SEATBELT_SEMGREP_RULESET:-p/security-audit}"
+# Format severity as JSON (null if empty, quoted string otherwise)
+_trivy_sev_json="null"; [ -n "$_trivy_sev" ] && _trivy_sev_json="$(json_str "$_trivy_sev")"
+_semgrep_sev_json="null"; [ -n "$_semgrep_sev" ] && _semgrep_sev_json="$(json_str "$_semgrep_sev")"
+_zizmor_sev_json="null"; [ -n "$_zizmor_sev" ] && _zizmor_sev_json="$(json_str "$_zizmor_sev")"
+
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF
-{"health":${HEALTH},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"semgrep":${SEMGREP},"shellcheck":${SHELLCHECK},"advisory":{"commitlint":{"enabled":${COMMITLINT_ADV_ENABLED}},"signing":{"enabled":${SIGNING_ADV_ENABLED},"gpgsign_configured":${GPGSIGN_CONFIGURED}}},"platform":"${PLATFORM}","package_managers":[${PMS}]}
+{"health":${HEALTH},"strict":${_strict_val},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"semgrep":${SEMGREP},"shellcheck":${SHELLCHECK},"advisory":{"commitlint":{"enabled":${COMMITLINT_ADV_ENABLED}},"signing":{"enabled":${SIGNING_ADV_ENABLED},"gpgsign_configured":${GPGSIGN_CONFIGURED}}},"config":{"trivy_severity":${_trivy_sev_json},"semgrep_severity":${_semgrep_sev_json},"zizmor_severity":${_zizmor_sev_json},"semgrep_ruleset":$(json_str "$_semgrep_ruleset")},"platform":"${PLATFORM}","package_managers":[${PMS}]}
 EOF
