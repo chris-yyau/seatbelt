@@ -144,6 +144,18 @@ SEATBELT_ZIZMOR_TIMEOUT="${SEATBELT_ZIZMOR_TIMEOUT:-${_SEATBELT_CFG_ZIZMOR_TIMEO
 SEATBELT_COMMITLINT_TIMEOUT="${SEATBELT_COMMITLINT_TIMEOUT:-${_SEATBELT_CFG_COMMITLINT_TIMEOUT:-}}"
 SEATBELT_SIGNING_TIMEOUT="${SEATBELT_SIGNING_TIMEOUT:-${_SEATBELT_CFG_SIGNING_TIMEOUT:-}}"
 
+# ── Validate timeout values are numeric ──────────────────────────
+for _seatbelt_tvar in SEATBELT_TRIVY_TIMEOUT SEATBELT_SEMGREP_TIMEOUT SEATBELT_SHELLCHECK_TIMEOUT \
+                       SEATBELT_CHECKOV_TIMEOUT SEATBELT_GITLEAKS_TIMEOUT SEATBELT_ZIZMOR_TIMEOUT \
+                       SEATBELT_COMMITLINT_TIMEOUT SEATBELT_SIGNING_TIMEOUT; do
+    _seatbelt_tval="${!_seatbelt_tvar:-}"
+    if [ -n "$_seatbelt_tval" ] && ! [[ "$_seatbelt_tval" =~ ^[0-9]+$ ]]; then
+        echo "SEATBELT: invalid timeout '${_seatbelt_tval}' for ${_seatbelt_tvar} — ignoring" >&2
+        eval "$_seatbelt_tvar=''"
+    fi
+done
+unset _seatbelt_tvar _seatbelt_tval
+
 # ── Clean up internal vars ───────────────────────────────────────
 unset _seatbelt_config_file _seatbelt_repo_root
 unset _SEATBELT_CFG_STRICT

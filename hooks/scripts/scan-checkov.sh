@@ -67,6 +67,7 @@ if [ -n "${SEATBELT_CHECKOV_TIMEOUT:-}" ]; then
 fi
 
 BLOCKED=0
+BLOCKED_COUNT=0
 BLOCK_DETAILS=""
 EXTRACTED=0
 EXPECTED=0
@@ -93,10 +94,18 @@ while IFS= read -r -d '' staged_file; do
     git show ":$staged_file" > "$SCAN_DIR/$staged_file" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
+    SCAN_EXIT=0
     if [ -n "$TIMEOUT_CMD" ]; then
-        SCAN_OUTPUT=$($TIMEOUT_CMD $CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
+        # shellcheck disable=SC2086
+        SCAN_OUTPUT=$($TIMEOUT_CMD $CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || SCAN_EXIT=$?
     else
-        SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || true
+        SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || SCAN_EXIT=$?
+    fi
+
+    # Detect timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+    if [ "$SCAN_EXIT" -eq 124 ] || [ "$SCAN_EXIT" -eq 137 ]; then
+        echo "SEATBELT DEGRADED: checkov timed out after ${SEATBELT_CHECKOV_TIMEOUT}s on $(basename "$staged_file")" >&2
+        continue
     fi
 
     # Parse JSON for findings
@@ -142,6 +151,7 @@ except Exception:
 
         if [ "$FAILED" -gt 0 ]; then
             BLOCKED=1
+            BLOCKED_COUNT=$((BLOCKED_COUNT + FAILED))
             BLOCK_DETAILS="${BLOCK_DETAILS}$(echo "$SCAN_OUTPUT" | grep "FAILED" | head -3)\n"
         elif [ "$PARSE_ERRORS" -gt 0 ]; then
             echo "SEATBELT: checkov parse error in $(basename "$staged_file") — skipping" >&2
@@ -149,6 +159,7 @@ except Exception:
     else
         if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
             BLOCKED=1
+            BLOCKED_COUNT=$((BLOCKED_COUNT + FINDING_COUNT))
             BLOCK_DETAILS="${BLOCK_DETAILS}${FINDING_SUMMARY}\n"
         fi
     fi
@@ -175,7 +186,7 @@ Bypass once: export SKIP_CHECKOV=1 in your shell, then retry"
     # Write advisory result file for summary when strict=false (block_emit only warns)
     if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
         mkdir -p "$SEATBELT_RESULT_DIR"
-        echo "${BLOCKED} finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/checkov"
+        echo "${BLOCKED_COUNT} finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/checkov"
     fi
 fi
 

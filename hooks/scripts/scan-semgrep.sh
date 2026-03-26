@@ -94,16 +94,28 @@ fi
 # ── Run semgrep scan ─────────────────────────────────────────────
 SCAN_OUTPUT=""
 SCAN_STDERR_FILE="$SCAN_DIR/.semgrep_stderr"
+SCAN_EXIT=0
 if [ -n "$TIMEOUT_CMD" ]; then
-    SCAN_OUTPUT=$($TIMEOUT_CMD semgrep scan --config "$SEMGREP_RULESET" --json --quiet "$SCAN_DIR" 2>"$SCAN_STDERR_FILE") || true
+    SCAN_OUTPUT=$($TIMEOUT_CMD semgrep scan --config "$SEMGREP_RULESET" --json --quiet "$SCAN_DIR" 2>"$SCAN_STDERR_FILE") || SCAN_EXIT=$?
 else
-    SCAN_OUTPUT=$(semgrep scan --config "$SEMGREP_RULESET" --json --quiet "$SCAN_DIR" 2>"$SCAN_STDERR_FILE") || true
+    SCAN_OUTPUT=$(semgrep scan --config "$SEMGREP_RULESET" --json --quiet "$SCAN_DIR" 2>"$SCAN_STDERR_FILE") || SCAN_EXIT=$?
 fi
 
-# Check for invalid ruleset
+# Detect timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+if [ "$SCAN_EXIT" -eq 124 ] || [ "$SCAN_EXIT" -eq 137 ]; then
+    echo "SEATBELT DEGRADED: semgrep timed out after ${SEATBELT_SEMGREP_TIMEOUT}s — scan skipped" >&2
+    exit 0
+fi
+
+# Check for invalid ruleset or other CLI failure with no JSON output
 if [ -z "$SCAN_OUTPUT" ] && [ -f "$SCAN_STDERR_FILE" ]; then
     if grep -qiE '(invalid|not found|error.*config|could not resolve)' "$SCAN_STDERR_FILE" 2>/dev/null; then
         echo "SEATBELT DEGRADED: semgrep invalid ruleset '${SEMGREP_RULESET}' — scan skipped" >&2
+        exit 0
+    fi
+    # Non-zero exit with no JSON and no known error pattern — CLI failure
+    if [ "$SCAN_EXIT" -ne 0 ]; then
+        echo "SEATBELT DEGRADED: semgrep exited with code ${SCAN_EXIT} — scan skipped" >&2
         exit 0
     fi
 fi

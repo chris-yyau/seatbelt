@@ -70,7 +70,29 @@ while IFS= read -r -d '' wf; do
     git show ":$wf" > "$SCAN_DIR/$wf" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    SCAN_OUTPUT=$(zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || true
+    # ── Portable timeout for zizmor ─────────────────────────────────
+    _ZIZMOR_TIMEOUT_CMD=""
+    if [ -n "${SEATBELT_ZIZMOR_TIMEOUT:-}" ]; then
+        if command -v timeout &>/dev/null; then
+            _ZIZMOR_TIMEOUT_CMD="timeout $SEATBELT_ZIZMOR_TIMEOUT"
+        elif command -v gtimeout &>/dev/null; then
+            _ZIZMOR_TIMEOUT_CMD="gtimeout $SEATBELT_ZIZMOR_TIMEOUT"
+        fi
+    fi
+
+    _ZIZMOR_EXIT=0
+    if [ -n "$_ZIZMOR_TIMEOUT_CMD" ]; then
+        # shellcheck disable=SC2086
+        SCAN_OUTPUT=$($_ZIZMOR_TIMEOUT_CMD zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
+    else
+        SCAN_OUTPUT=$(zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
+    fi
+
+    # Detect timeout
+    if [ "$_ZIZMOR_EXIT" -eq 124 ] || [ "$_ZIZMOR_EXIT" -eq 137 ]; then
+        echo "SEATBELT DEGRADED: zizmor timed out after ${SEATBELT_ZIZMOR_TIMEOUT}s on $(basename "$wf")" >&2
+        continue
+    fi
 
     # Parse JSON for findings
     # zizmor v1 JSON schema: top-level array with ident, determinations.severity,
@@ -115,6 +137,21 @@ except Exception:
             # Write result for summary aggregation (append: multiple workflows may have findings)
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
+
+            # Severity gating on text fallback: match severity labels in output
+            if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
+                _sev_lower=$(printf '%s' "$SEATBELT_ZIZMOR_SEVERITY" | tr '[:upper:]' '[:lower:]')
+                _has_blocking_text=""
+                case "$_sev_lower" in
+                    low)    echo "$SCAN_OUTPUT" | grep -qE '(warning|error)\[' && _has_blocking_text="yes" ;;
+                    medium) echo "$SCAN_OUTPUT" | grep -qE '(warning|error)\[' && _has_blocking_text="yes" ;;
+                    high)   echo "$SCAN_OUTPUT" | grep -qE 'error\[' && _has_blocking_text="yes" ;;
+                esac
+                if [ "$_has_blocking_text" = "yes" ]; then
+                    _ZIZMOR_BLOCK_REASONS="${_ZIZMOR_BLOCK_REASONS}${HITS} issue(s) in $(basename "$wf"); "
+                fi
+                unset _sev_lower _has_blocking_text
+            fi
         elif [ -n "$SCAN_OUTPUT" ]; then
             # Non-empty output that is neither JSON nor text findings — likely a CLI error
             # (e.g. --format json unsupported). Emit a degraded warning rather than silently skip.

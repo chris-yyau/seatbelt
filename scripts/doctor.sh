@@ -248,9 +248,9 @@ _sg_raw="${SEATBELT_SIGNING_ENABLED:-true}"
 unset _cl_raw _sg_raw
 
 # ── v6 config values ────────────────────────────────────────────────
-# Normalize strict to JSON boolean
+# Normalize strict to JSON boolean (match block-emit.sh: only "false" disables)
 _strict_raw="${SEATBELT_STRICT:-true}"
-[ "$_strict_raw" = "true" ] && _strict_val="true" || _strict_val="false"
+[ "$_strict_raw" = "false" ] && _strict_val="false" || _strict_val="true"
 unset _strict_raw
 _trivy_sev="${SEATBELT_TRIVY_SEVERITY:-}"
 _semgrep_sev="${SEATBELT_SEMGREP_SEVERITY:-}"

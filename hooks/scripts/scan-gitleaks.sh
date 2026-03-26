@@ -63,6 +63,12 @@ fi
 # Exit 0 = clean
 [ "$GITLEAKS_EXIT" -eq 0 ] && exit 0
 
+# Timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+if [ "$GITLEAKS_EXIT" -eq 124 ] || [ "$GITLEAKS_EXIT" -eq 137 ]; then
+    echo "SEATBELT DEGRADED: gitleaks timed out after ${SEATBELT_GITLEAKS_TIMEOUT:-?}s — scan skipped" >&2
+    exit 0
+fi
+
 # Exit 1 = findings → BLOCK
 if [ "$GITLEAKS_EXIT" -eq 1 ]; then
     TRUNCATED=$(echo "$GITLEAKS_OUTPUT" | head -20)

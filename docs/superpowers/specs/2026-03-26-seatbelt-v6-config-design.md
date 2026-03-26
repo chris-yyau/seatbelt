@@ -127,11 +127,8 @@ block_emit() {
     local scanner="$1" reason="$2"
     if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
         echo "SEATBELT: $scanner would block: $reason" >&2
-        # Write advisory result file so scan-summary.sh includes downgraded blockers
-        if [ -n "${SEATBELT_RESULT_DIR:-}" ]; then
-            mkdir -p "$SEATBELT_RESULT_DIR"
-            echo "1 finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/$scanner"
-        fi
+        # Note: advisory result files are written by each scanner after calling
+        # block_emit, not by this helper — avoids double-counting.
     elif command -v jq &>/dev/null; then
         jq -n --arg r "$reason" '{"decision":"block","reason":$r}'
     else
@@ -177,7 +174,7 @@ block_emit() {
 
 ### commitlint, signing
 
-- Read timeout from config. No other changes.
+- Config exposes `SEATBELT_COMMITLINT_TIMEOUT` and `SEATBELT_SIGNING_TIMEOUT` for future use. Current hook implementations do not apply timeouts to these advisory checks (they are fast enough to not need them). No other changes.
 
 ### Timeout Behavior
 
@@ -195,7 +192,7 @@ block_emit() {
 
 The Python YAML parser expands to read `strict`, `severity`, `ruleset`, and `timeout` fields alongside `enabled`. Outputs additional `_SEATBELT_CFG_*` vars:
 
-```
+```text
 _SEATBELT_CFG_STRICT
 _SEATBELT_CFG_TRIVY_SEVERITY
 _SEATBELT_CFG_SEMGREP_SEVERITY
@@ -208,7 +205,7 @@ _SEATBELT_CFG_<SCANNER>_TIMEOUT
 
 When PyYAML is not installed, the regex fallback parser extends to capture the new fields. For each known scanner name, scan forward from the `name:` line and match all indented `key: value` pairs:
 
-```
+```regex
 enabled:\s*(true|false)
 severity:\s*(\S+)
 ruleset:\s*(\S+)

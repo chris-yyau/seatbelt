@@ -51,7 +51,7 @@ _seatbelt_validate_severity() {
     normalized=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
     local lower_scale
     lower_scale=$(printf '%s' "$scale" | tr '[:upper:]' '[:lower:]')
-    if ! echo ",$lower_scale," | grep -q ",$normalized,"; then
+    if ! echo ",$lower_scale," | grep -qF ",$normalized,"; then
         echo "SEATBELT: $scanner: unknown severity '$value' — ignoring" >&2
         return 1
     fi
