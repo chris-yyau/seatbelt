@@ -111,7 +111,7 @@ expected = {
     'trivy':    ('https://',),  # apt-get requires external repo — always link to install docs
     'zizmor':   ('pip3',) if shutil.which('pip3') else (('cargo',) if shutil.which('cargo') else ('https://',)),
     'semgrep':  ('pip3',) if shutil.which('pip3') else ('https://',),
-    'shellcheck': ('https://',),  # no brew in degraded path
+    'shellcheck': ('sudo apt-get',) if shutil.which('apt-get') else ('https://',),
 }
 for tool, prefixes in expected.items():
     cmd = d[tool].get('install_cmd')
