@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/chris-yyau/seatbelt/compare/v1.5.0...v1.6.0) (2026-03-26)
+
+
+### Features
+
+* seatbelt v6 — advanced scanner configuration ([#14](https://github.com/chris-yyau/seatbelt/issues/14)) ([b060cc1](https://github.com/chris-yyau/seatbelt/commit/b060cc1f5ba267dc6ef25f74d8b7f7dc49a2f501))
+
 # [1.5.0](https://github.com/chris-yyau/seatbelt/compare/v1.4.0...v1.5.0) (2026-03-26)
 
 
