@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/chris-yyau/seatbelt/compare/v1.6.0...v1.6.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* prefer brew over pip3 for semgrep and zizmor install suggestions ([d5680a1](https://github.com/chris-yyau/seatbelt/commit/d5680a1bfd2693398aab64a95ec9d7038bedc77b))
+
 # [1.6.0](https://github.com/chris-yyau/seatbelt/compare/v1.5.0...v1.6.0) (2026-03-26)
 
 
