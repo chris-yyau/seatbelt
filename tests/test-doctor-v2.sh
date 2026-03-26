@@ -12,9 +12,9 @@ h = d['health']
 assert 'active' in h, 'missing active'
 assert 'total' in h, 'missing total'
 assert 'score' in h, 'missing score'
-assert h['total'] == 4, f'total should be 4, got {h[\"total\"]}'
+assert h['total'] == 5, f'total should be 5, got {h[\"total\"]}'
 assert isinstance(h['active'], int), 'active not int'
-assert h['score'] == f\"{h['active']}/4\", 'score format wrong'
+assert h['score'] == f\"{h['active']}/5\", 'score format wrong'
 " 2>/dev/null; then
         ERRORS="\n  doctor output missing or invalid 'health' field"
         fail "doctor has health score"
@@ -50,7 +50,7 @@ test_doctor_has_install_cmd() {
     if ! echo "$STDOUT" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor']:
+for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor', 'semgrep']:
     entry = d[tool]
     assert 'install_cmd' in entry, f'{tool} missing install_cmd'
     if entry['installed']:
@@ -70,7 +70,7 @@ test_doctor_install_cmd_priority() {
     if ! echo "$STDOUT" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor']:
+for tool in ['gitleaks', 'checkov', 'trivy', 'zizmor', 'semgrep']:
     entry = d[tool]
     if not entry['installed']:
         assert entry['install_cmd'] is not None, f'{tool} not installed but no install_cmd'
@@ -110,6 +110,7 @@ expected = {
     'checkov':  ('pip3',) if shutil.which('pip3') else ('https://',),
     'trivy':    ('https://',),  # apt-get requires external repo — always link to install docs
     'zizmor':   ('pip3',) if shutil.which('pip3') else (('cargo',) if shutil.which('cargo') else ('https://',)),
+    'semgrep':  ('pip3',) if shutil.which('pip3') else ('https://',),
 }
 for tool, prefixes in expected.items():
     cmd = d[tool].get('install_cmd')
@@ -136,14 +137,14 @@ d = json.load(sys.stdin)
 h = d['health']
 # Recompute expected active count from scanner entries
 expected = 0
-for tool in ['gitleaks', 'checkov', 'zizmor']:
+for tool in ['gitleaks', 'checkov', 'zizmor', 'semgrep']:
     if d[tool].get('installed', False):
         expected += 1
 trivy = d['trivy']
 if trivy.get('installed', False) and trivy.get('db_cached', False):
     expected += 1
 assert h['active'] == expected, f'health active={h[\"active\"]} but computed={expected}'
-assert h['score'] == f'{expected}/4', f'score mismatch'
+assert h['score'] == f'{expected}/5', f'score mismatch'
 " 2>/dev/null; then
         ERRORS="\n  health score does not match recomputed value"
         fail "doctor health score correct"

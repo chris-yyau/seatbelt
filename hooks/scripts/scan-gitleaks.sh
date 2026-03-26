@@ -36,7 +36,15 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # ── Clean stale scan results from previous blocked commits ────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
+# As the first scanner in hooks.json, gitleaks owns result-dir lifecycle.
+# Warn-only scanners (trivy, zizmor, semgrep) only clean their own file.
+# Cleanup runs even if gitleaks is disabled — prevents stale results.
 rm -rf "$SEATBELT_RESULT_DIR"
+
+# ── Config file override ─────────────────────────────────────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/config.sh"
+[ "$SEATBELT_GITLEAKS_ENABLED" = "false" ] && exit 0
 
 # ── gitleaks availability ───────────────────────────────────────────
 if ! command -v gitleaks &>/dev/null; then

@@ -34,6 +34,11 @@ fi
 [ "$IS_GIT_COMMIT" != "yes" ] && exit 0
 git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 
+# ── Config file override ─────────────────────────────────────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/config.sh"
+[ "$SEATBELT_CHECKOV_ENABLED" = "false" ] && exit 0
+
 # ── checkov availability ────────────────────────────────────────────
 CHECKOV_CMD=""
 if command -v checkov &>/dev/null; then

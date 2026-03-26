@@ -25,6 +25,7 @@ get_version() {
         checkov)  checkov --version 2>/dev/null | head -1 ;;
         trivy)    trivy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
         zizmor)   zizmor --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
+        semgrep)  semgrep --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 ;;
     esac
 }
 
@@ -95,6 +96,15 @@ get_install_cmd() {
                 echo "brew install zizmor"
             else
                 echo "https://woodruffw.github.io/zizmor/installation/"
+            fi
+            ;;
+        semgrep)
+            if [ "$has_pip3" = "true" ]; then
+                echo "pip3 install semgrep"
+            elif [ "$has_brew" = "true" ]; then
+                echo "brew install semgrep"
+            else
+                echo "https://semgrep.dev/docs/getting-started/"
             fi
             ;;
     esac
@@ -174,6 +184,7 @@ GITLEAKS=$(check_tool "gitleaks")
 CHECKOV=$(check_tool "checkov")
 TRIVY=$(check_tool "trivy")
 ZIZMOR=$(check_tool "zizmor")
+SEMGREP=$(check_tool "semgrep")
 
 # ── Compute health score ─────────────────────────────────────────────
 # Trivy is "active" only when installed AND db_cached is true.
@@ -184,18 +195,18 @@ if command -v python3 &>/dev/null; then
 import sys, json
 scanners = json.loads(sys.argv[1])
 active = 0
-for name in ['gitleaks', 'checkov', 'zizmor']:
+for name in ['gitleaks', 'checkov', 'zizmor', 'semgrep']:
     if scanners[name].get('installed', False):
         active += 1
 trivy = scanners['trivy']
 if trivy.get('installed', False) and trivy.get('db_cached', False):
     active += 1
 print(active)
-" "{\"gitleaks\":${GITLEAKS},\"checkov\":${CHECKOV},\"trivy\":${TRIVY},\"zizmor\":${ZIZMOR}}" 2>/dev/null || echo "0")
+" "{\"gitleaks\":${GITLEAKS},\"checkov\":${CHECKOV},\"trivy\":${TRIVY},\"zizmor\":${ZIZMOR},\"semgrep\":${SEMGREP}}" 2>/dev/null || echo "0")
 else
     # Fallback: glob patterns (order-dependent but works without python3)
     ACTIVE_COUNT=0
-    for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR"; do
+    for check_var in "$GITLEAKS" "$CHECKOV" "$ZIZMOR" "$SEMGREP"; do
         case "$check_var" in
             *'"installed":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
         esac
@@ -204,9 +215,9 @@ else
         *'"installed":true'*'"db_cached":true'*) ACTIVE_COUNT=$((ACTIVE_COUNT + 1)) ;;
     esac
 fi
-HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":4,\"score\":\"${ACTIVE_COUNT}/4\"}"
+HEALTH="{\"active\":${ACTIVE_COUNT},\"total\":5,\"score\":\"${ACTIVE_COUNT}/5\"}"
 
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF
-{"health":${HEALTH},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"platform":"${PLATFORM}","package_managers":[${PMS}]}
+{"health":${HEALTH},"gitleaks":${GITLEAKS},"checkov":${CHECKOV},"trivy":${TRIVY},"zizmor":${ZIZMOR},"semgrep":${SEMGREP},"platform":"${PLATFORM}","package_managers":[${PMS}]}
 EOF

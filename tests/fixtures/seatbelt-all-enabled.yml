@@ -1,0 +1,11 @@
+scanners:
+  gitleaks:
+    enabled: true
+  checkov:
+    enabled: true
+  trivy:
+    enabled: true
+  zizmor:
+    enabled: true
+  semgrep:
+    enabled: true

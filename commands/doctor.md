@@ -17,7 +17,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
 2. Parse the JSON output. Compute the health score:
    - Count a scanner as **active** only if it is installed AND (for trivy) `db_cached` is true
    - trivy installed with `db_cached=false` counts as **degraded**, not active
-   - Show the score prominently: **Seatbelt Health: N/4 scanners active**
+   - Show the score prominently: **Seatbelt Health: N/5 scanners active**
 
 3. Present a status table with fail mode:
 
@@ -27,6 +27,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
 | checkov | installed/missing | version or — | BLOCK |
 | trivy | installed/missing/degraded (no DB) | version or — | warn |
 | zizmor | installed/missing | version or — | warn |
+| semgrep | installed/missing | version or — | warn |
 
 For trivy: if it is installed but `db_cached` is false in the JSON output, show status as **"degraded (no DB)"** rather than installed. This is a distinct condition — trivy cannot scan dependencies without its vulnerability database. The binary is present but the scanner is non-functional.
 
@@ -55,6 +56,11 @@ For trivy: if it is installed but `db_cached` is false in the JSON output, show 
 - If `pip3` in package_managers: `pip3 install zizmor`
 - If `cargo` in package_managers: `cargo install zizmor`
 
-6. If all 4 scanners are installed and trivy has a DB:
-   - Show "All 4 scanners active — seatbelt is fully operational."
+**semgrep** — Scans source code for security vulnerabilities (SQL injection, XSS, command injection, path traversal):
+- If `pip3` in package_managers: `pip3 install semgrep`
+- If `brew` in package_managers: `brew install semgrep`
+- Otherwise: follow install guide at https://semgrep.dev/docs/getting-started/
+
+6. If all 5 scanners are installed and trivy has a DB:
+   - Show "All 5 scanners active — seatbelt is fully operational."
    - No further action needed.

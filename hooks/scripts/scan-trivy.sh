@@ -28,6 +28,11 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # Clean unconditionally on every commit attempt, before any early exits.
 # shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
+
+# ── Config file override ─────────────────────────────────────────
+# shellcheck disable=SC1091
+source "$LIB_DIR/config.sh"
+[ "$SEATBELT_TRIVY_ENABLED" = "false" ] && exit 0
 rm -f "$SEATBELT_RESULT_DIR/trivy"
 
 # ── trivy availability ──────────────────────────────────────────────
