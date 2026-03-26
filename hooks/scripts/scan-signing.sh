@@ -59,8 +59,11 @@ except Exception:
 [ "$CMD_HAS_SIGN" = "yes" ] && exit 0
 
 # Check 2: Is commit.gpgsign enabled in git config?
-GPGSIGN=$(git config --get commit.gpgsign 2>/dev/null || true)
-[ "$GPGSIGN" = "true" ] && exit 0
+# Git booleans can be true/yes/on/1
+_gpgsign=$(git config --get commit.gpgsign 2>/dev/null || true)
+case "$_gpgsign" in
+    true|yes|on|1) exit 0 ;;
+esac
 
 # ── Emit advisory ────────────────────────────────────────────────
 echo "SEATBELT: commit signing not enabled — consider: git config --global commit.gpgsign true" >&2

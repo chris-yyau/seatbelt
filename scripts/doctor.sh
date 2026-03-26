@@ -238,8 +238,12 @@ unset _gpgsign_raw
 # Honor .seatbelt.yml config for advisory scanners
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/../hooks/scripts/lib" 2>/dev/null && pwd)/config.sh" 2>/dev/null || true
-COMMITLINT_ADV_ENABLED="${SEATBELT_COMMITLINT_ENABLED:-true}"
-SIGNING_ADV_ENABLED="${SEATBELT_SIGNING_ENABLED:-true}"
+# Match hook behavior: only "false" disables, everything else is enabled
+_cl_raw="${SEATBELT_COMMITLINT_ENABLED:-true}"
+_sg_raw="${SEATBELT_SIGNING_ENABLED:-true}"
+[ "$_cl_raw" = "false" ] && COMMITLINT_ADV_ENABLED="false" || COMMITLINT_ADV_ENABLED="true"
+[ "$_sg_raw" = "false" ] && SIGNING_ADV_ENABLED="false" || SIGNING_ADV_ENABLED="true"
+unset _cl_raw _sg_raw
 
 # ── Output JSON ─────────────────────────────────────────────────────
 cat <<EOF

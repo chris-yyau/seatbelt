@@ -28,12 +28,12 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # Clean unconditionally on every commit attempt, before any early exits.
 # shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
+rm -f "$SEATBELT_RESULT_DIR/shellcheck"
 
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_SHELLCHECK_ENABLED" = "false" ] && exit 0
-rm -f "$SEATBELT_RESULT_DIR/shellcheck"
 
 # ── shellcheck availability ─────────────────────────────────────────
 if ! command -v shellcheck &>/dev/null; then
@@ -110,19 +110,16 @@ except Exception:
     FINDING_COUNT="${FINDING_INFO%%|*}"
     FINDING_SUMMARY="${FINDING_INFO#*|}"
 
-    # Handle parse result
     if [ "$FINDING_COUNT" = "-1" ]; then
         echo "SEATBELT: shellcheck: could not parse scan output for $(basename "$sf") — scan result unknown" >&2
-    else
-        if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
-            echo "SEATBELT: shellcheck found ${FINDING_COUNT} issue(s) in $(basename "$sf"):" >&2
-            if [ -n "$FINDING_SUMMARY" ]; then
-                printf '%s\n' "$FINDING_SUMMARY" >&2
-            fi
-            # Write result for summary aggregation (append: multiple scripts may have findings)
-            mkdir -p "$SEATBELT_RESULT_DIR"
-            echo "${FINDING_COUNT} issue(s) in $(basename "$sf")" >> "$SEATBELT_RESULT_DIR/shellcheck"
+    elif [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+        echo "SEATBELT: shellcheck found ${FINDING_COUNT} issue(s) in $(basename "$sf"):" >&2
+        if [ -n "$FINDING_SUMMARY" ]; then
+            printf '%s\n' "$FINDING_SUMMARY" >&2
         fi
+        # Write result for summary aggregation (append: multiple scripts may have findings)
+        mkdir -p "$SEATBELT_RESULT_DIR"
+        echo "${FINDING_COUNT} issue(s) in $(basename "$sf")" >> "$SEATBELT_RESULT_DIR/shellcheck"
     fi
 done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
