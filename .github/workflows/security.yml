@@ -22,8 +22,6 @@ on:
       - '**/requirements*.txt'
       - '**/Dockerfile'
       - '**/*.tf'
-    paths-ignore:
-      - '**/*.md'
   push:
     branches: [main]
     paths:
@@ -44,8 +42,6 @@ on:
       - '**/requirements*.txt'
       - '**/Dockerfile'
       - '**/*.tf'
-    paths-ignore:
-      - '**/*.md'
 
 concurrency:
   group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
