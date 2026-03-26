@@ -144,13 +144,18 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: Write summary
+        env:
+          TRIVY: ${{ needs.trivy.result }}
+          SEMGREP: ${{ needs.semgrep.result }}
+          CHECKOV: ${{ needs.checkov.result }}
+          ZIZMOR: ${{ needs.zizmor.result }}
         run: |
           {
             echo "## Security Backstop"
             echo "| Scanner | Result |"
             echo "|---------|--------|"
-            echo "| trivy | ${{ needs.trivy.result }} |"
-            echo "| semgrep | ${{ needs.semgrep.result }} |"
-            echo "| checkov | ${{ needs.checkov.result }} |"
-            echo "| zizmor | ${{ needs.zizmor.result }} |"
+            echo "| trivy | $TRIVY |"
+            echo "| semgrep | $SEMGREP |"
+            echo "| checkov | $CHECKOV |"
+            echo "| zizmor | $ZIZMOR |"
           } >> "$GITHUB_STEP_SUMMARY"
