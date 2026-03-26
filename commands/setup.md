@@ -5,7 +5,7 @@ description: Install and verify security scanners for seatbelt
 
 # Seatbelt Setup
 
-Detect missing scanners, install them with user confirmation, and verify they work.
+Detect missing scanners, install them automatically, and verify they work.
 
 ## Steps
 
@@ -28,25 +28,22 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
 Show the health score: `Seatbelt Health: N/6 scanners active`
 
 3. If all 6 scanners are installed:
+   - If trivy is installed but `db_cached` is false, run `trivy image --download-db-only` to download the vulnerability database automatically.
    - Show "All 6 scanners active — seatbelt is fully operational."
-   - If trivy is installed but `db_cached` is false, note: "trivy is installed but has no vulnerability database. Run `trivy image --download-db-only` to enable dependency scanning."
    - Exit.
 
 4. If scanners are missing, collect the `install_cmd` for each missing tool from the doctor output. Group commands by package manager into batches. For example:
    - If gitleaks and trivy are both missing and both use brew: `brew install gitleaks trivy`
-   - If checkov and semgrep both use pip3: `pip3 install checkov semgrep`
+   - If checkov and semgrep both use brew: `brew install checkov semgrep`
 
-5. Present the install plan to the user. Show each command that will be run. Ask for confirmation before executing. Example:
+5. Show what will be installed, then execute immediately (no confirmation needed — the user already opted in by running `/seatbelt:setup`). Example:
 
-   > **Missing scanners: checkov, zizmor**
-   >
-   > I'll run these commands to install them:
+   > **Installing missing scanners: checkov, zizmor**
    > ```
-   > pip3 install checkov zizmor
+   > brew install checkov zizmor
    > ```
-   > Proceed?
 
-6. After user confirms, execute each batch command. Show output.
+6. Execute each batch command. Show output. If trivy is installed but `db_cached` is false, also run `trivy image --download-db-only`.
 
 7. Re-run doctor.sh to verify installation succeeded. Show updated status table.
 

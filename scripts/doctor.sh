@@ -89,21 +89,21 @@ get_install_cmd() {
             fi
             ;;
         zizmor)
-            if [ "$has_pip3" = "true" ]; then
+            if [ "$has_brew" = "true" ]; then
+                echo "brew install zizmor"
+            elif [ "$has_pip3" = "true" ]; then
                 echo "pip3 install zizmor"
             elif [ "$has_cargo" = "true" ]; then
                 echo "cargo install zizmor"
-            elif [ "$has_brew" = "true" ]; then
-                echo "brew install zizmor"
             else
                 echo "https://woodruffw.github.io/zizmor/installation/"
             fi
             ;;
         semgrep)
-            if [ "$has_pip3" = "true" ]; then
-                echo "pip3 install semgrep"
-            elif [ "$has_brew" = "true" ]; then
+            if [ "$has_brew" = "true" ]; then
                 echo "brew install semgrep"
+            elif [ "$has_pip3" = "true" ]; then
+                echo "pip3 install semgrep"
             else
                 echo "https://semgrep.dev/docs/getting-started/"
             fi

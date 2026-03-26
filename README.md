@@ -52,12 +52,10 @@ If you prefer to install scanner binaries yourself:
 
 ```bash
 # macOS (recommended: install all)
-brew install gitleaks checkov trivy zizmor shellcheck
-pip3 install semgrep
+brew install gitleaks checkov trivy zizmor semgrep shellcheck
 
 # Linux (brew if available, otherwise pip3/releases)
-brew install gitleaks checkov trivy zizmor shellcheck
-pip3 install semgrep
+brew install gitleaks checkov trivy zizmor semgrep shellcheck
 # Or without brew:
 #   gitleaks:   https://github.com/gitleaks/gitleaks/releases
 #   trivy:      https://aquasecurity.github.io/trivy/latest/getting-started/installation/

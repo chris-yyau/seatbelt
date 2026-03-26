@@ -43,7 +43,7 @@ fi
 
 # ── zizmor availability ─────────────────────────────────────────────
 if ! command -v zizmor &>/dev/null; then
-    echo "SEATBELT DEGRADED: zizmor not installed — GitHub Actions scanning DISABLED (pip3 install zizmor | /seatbelt doctor)" >&2
+    echo "SEATBELT DEGRADED: zizmor not installed — GitHub Actions scanning DISABLED (brew install zizmor | /seatbelt:doctor)" >&2
     exit 0
 fi
 

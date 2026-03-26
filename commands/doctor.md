@@ -54,12 +54,13 @@ For trivy: if it is installed but `db_cached` is false in the JSON output, show 
 - Otherwise: follow install guide at https://aquasecurity.github.io/trivy/latest/getting-started/installation/ (note: `apt-get install trivy` requires adding Aqua's APT repository first)
 
 **zizmor** — Checks GitHub Actions workflows for security issues (injection risks, unpinned actions):
+- If `brew` in package_managers: `brew install zizmor`
 - If `pip3` in package_managers: `pip3 install zizmor`
 - If `cargo` in package_managers: `cargo install zizmor`
 
 **semgrep** — Scans source code for security vulnerabilities (SQL injection, XSS, command injection, path traversal):
-- If `pip3` in package_managers: `pip3 install semgrep`
 - If `brew` in package_managers: `brew install semgrep`
+- If `pip3` in package_managers: `pip3 install semgrep`
 - Otherwise: follow install guide at https://semgrep.dev/docs/getting-started/
 
 **shellcheck** — Checks shell scripts for common bugs, pitfalls, and style issues:
