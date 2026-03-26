@@ -3,18 +3,66 @@
 name: Security
 
 on:
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'hooks/**'
+      - 'scripts/**'
+      - '**/*.sh'
+      - '**/*.js'
+      - '**/*.py'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '.seatbelt.yml'
+      - 'package.json'
+      - '**/package-lock.json'
+      - '**/pnpm-lock.yaml'
+      - '**/yarn.lock'
+      - '**/go.sum'
+      - '**/requirements*.txt'
+      - '**/Dockerfile'
+      - '**/*.tf'
+    paths-ignore:
+      - '**/*.md'
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths:
+      - '.github/**'
+      - 'hooks/**'
+      - 'scripts/**'
+      - '**/*.sh'
+      - '**/*.js'
+      - '**/*.py'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '.seatbelt.yml'
+      - 'package.json'
+      - '**/package-lock.json'
+      - '**/pnpm-lock.yaml'
+      - '**/yarn.lock'
+      - '**/go.sum'
+      - '**/requirements*.txt'
+      - '**/Dockerfile'
+      - '**/*.tf'
+    paths-ignore:
+      - '**/*.md'
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   trivy:
     name: Dependency CVEs
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
@@ -44,8 +92,6 @@ jobs:
     name: Code security
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
@@ -63,8 +109,6 @@ jobs:
     name: IaC misconfig
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
@@ -82,8 +126,6 @@ jobs:
     name: Actions security
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
@@ -93,24 +135,26 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify SHA pinning
-        run: |
-          # All external 'uses:' must reference a full 40-char SHA.
-          # Local actions (uses: ./) and docker:// refs are exempt.
-          # Expected format: uses: owner/action@<sha> # vX.Y.Z
-          #   The inline version comment is required for Dependabot
-          #   to track and bump pinned action versions.
-          UNPINNED=$(grep -rn 'uses:' .github/workflows/ \
-            | grep -v 'docker://' \
-            | grep -v 'uses: \./' \
-            | grep -vP '@[0-9a-f]{40}\b' || true)
-          if [ -n "$UNPINNED" ]; then
-            echo "::error::Unpinned GitHub Actions detected."
-            echo "::error::Expected: uses: owner/action@<full-sha> # vX.Y.Z"
-            echo "$UNPINNED"
-            exit 1
-          fi
-          echo "All actions are SHA-pinned."
+        run: bash .github/scripts/check-pinned-uses.sh
       - name: Install zizmor
         run: pip install --quiet zizmor
       - name: Scan GitHub Actions workflows
         run: zizmor .github/workflows/
+
+  reports:
+    if: always()
+    needs: [trivy, semgrep, checkov, zizmor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "## Security Backstop"
+            echo "| Scanner | Result |"
+            echo "|---------|--------|"
+            echo "| trivy | ${{ needs.trivy.result }} |"
+            echo "| semgrep | ${{ needs.semgrep.result }} |"
+            echo "| checkov | ${{ needs.checkov.result }} |"
+            echo "| zizmor | ${{ needs.zizmor.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
