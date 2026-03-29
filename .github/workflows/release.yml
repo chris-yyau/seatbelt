@@ -37,6 +37,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: 22
@@ -77,6 +78,8 @@ jobs:
           mkdir -p dist
           gh api "repos/${REPO}/tarball/${TAG}" > "dist/seatbelt-${TAG}.tar.gz"
           gh api "repos/${REPO}/zipball/${TAG}" > "dist/seatbelt-${TAG}.zip"
+          tar tzf "dist/seatbelt-${TAG}.tar.gz" > /dev/null
+          unzip -t "dist/seatbelt-${TAG}.zip" > /dev/null
       - name: Attest source archives
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
