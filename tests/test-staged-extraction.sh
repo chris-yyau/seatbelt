@@ -120,9 +120,24 @@ RUN echo WORKTREE_MARKER_XYZ789
 EOF
     # Do NOT re-stage — staged version has STAGED_MARKER_ABC123
 
-    local stub stubdir
-    stub=$(make_stub_scanner "checkov")
-    stubdir=$(dirname "$stub")
+    # Stub scanner logs --directory path and content of files within it
+    local stubdir
+    stubdir=$(mktemp -d)
+    local stub="$stubdir/checkov"
+    cat > "$stub" << 'STUBEOF'
+#!/usr/bin/env bash
+# Stub scanner for --directory mode — records dir contents
+echo "STUB_CALLED: $*" >> "$0.log"
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "--directory" ] && [ -d "$arg" ]; then
+        find "$arg" -type f -exec sh -c 'echo "STUB_CONTENT: $(cat "$1")"' _ {} \; >> "$0.log" 2>/dev/null
+    fi
+    prev="$arg"
+done
+exit 0
+STUBEOF
+    chmod +x "$stub"
     run_hook_in_repo "$repo" "scan-checkov.sh" "$FIXTURES_DIR/git-commit.json" "$stubdir"
 
     # Verify stub was called and received the STAGED content (not working tree)
@@ -239,18 +254,33 @@ run_symlink_rejection_test() {
     ln -s /etc/passwd "$repo/Dockerfile.link"
     git -C "$repo" add Dockerfile.link
 
-    local stub
-    stub=$(make_stub_scanner "checkov")
-    run_hook_in_repo "$repo" "scan-checkov.sh" "$FIXTURES_DIR/git-commit.json" "$(dirname "$stub")"
+    # Stub scanner for --directory mode
+    local stubdir
+    stubdir=$(mktemp -d)
+    local stub="$stubdir/checkov"
+    cat > "$stub" << 'STUBEOF'
+#!/usr/bin/env bash
+echo "STUB_CALLED: $*" >> "$0.log"
+prev=""
+for arg in "$@"; do
+    if [ "$prev" = "--directory" ] && [ -d "$arg" ]; then
+        find "$arg" -type f -exec sh -c 'echo "STUB_FILE: $1"' _ {} \; >> "$0.log" 2>/dev/null
+    fi
+    prev="$arg"
+done
+exit 0
+STUBEOF
+    chmod +x "$stub"
+    run_hook_in_repo "$repo" "scan-checkov.sh" "$FIXTURES_DIR/git-commit.json" "$stubdir"
 
-    # Symlink should NOT be scanned
+    # Symlink should NOT be extracted to SCAN_DIR
     if [ -f "$stub.log" ] && grep -q "Dockerfile.link" "$stub.log"; then
         fail "symlink: Dockerfile.link should be skipped"
     else
         pass "symlink: non-blob entries are skipped"
     fi
 
-    rm -rf "$repo" "$(dirname "$stub")"
+    rm -rf "$repo" "$stubdir"
 }
 run_symlink_rejection_test
 
