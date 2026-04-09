@@ -1,6 +1,7 @@
 [extend]
 useDefault = true
 
-[[allowlist]]
-description = "CLAUDE.md documentation examples"
-paths = [".claude/CLAUDE.md"]
+[allowlist]
+paths = [
+    '''\.claude/CLAUDE\.md'''
+]
