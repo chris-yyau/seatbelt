@@ -1,0 +1,15 @@
+{
+  "files": [
+    { "path": "package.json", "field": "version" },
+    { "path": ".claude-plugin/plugin.json", "field": "version" }
+  ],
+  "audit": {
+    "exclude": [
+      "node_modules",
+      "package-lock.json",
+      ".upstream-sources.json",
+      "CHANGELOG.md",
+      "docs"
+    ]
+  }
+}
