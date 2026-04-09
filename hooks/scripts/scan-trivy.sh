@@ -43,7 +43,7 @@ fi
 
 # ── trivy availability ──────────────────────────────────────────────
 if ! command -v trivy &>/dev/null; then
-    echo "SEATBELT DEGRADED: trivy not installed — dependency CVE scanning DISABLED (brew install trivy | /seatbelt doctor)" >&2
+    echo "SEATBELT DEGRADED: trivy not installed — dependency CVE scanning DISABLED (brew install trivy | /seatbelt:doctor)" >&2
     exit 0
 fi
 
@@ -181,8 +181,12 @@ try:
                 print('yes')
                 sys.exit(0)
 except Exception:
-    pass
+    print('error')
 " 2>/dev/null || true)
+                if [ "$_trivy_has_blocking" = "error" ]; then
+                    echo "SEATBELT: trivy: severity gating could not parse scan output — treating as blocking" >&2
+                    _trivy_has_blocking="yes"
+                fi
                 if [ "$_trivy_has_blocking" = "yes" ]; then
                     _TRIVY_BLOCK_REASONS="${_TRIVY_BLOCK_REASONS}${FINDING_COUNT} finding(s) in $(basename "$lf"); "
                 fi

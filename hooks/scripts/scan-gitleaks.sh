@@ -24,10 +24,8 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # ── Clean stale scan results from previous blocked commits ────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
-# As the first scanner in hooks.json, gitleaks owns result-dir lifecycle.
-# Warn-only scanners (trivy, zizmor, semgrep) only clean their own file.
-# Cleanup runs even if gitleaks is disabled — prevents stale results.
-rm -rf "$SEATBELT_RESULT_DIR"
+# Each scanner cleans its own result file. The summary hook cleans the dir.
+rm -f "$SEATBELT_RESULT_DIR/gitleaks"
 
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
@@ -38,7 +36,7 @@ source "$LIB_DIR/block-emit.sh"
 
 # ── gitleaks availability ───────────────────────────────────────────
 if ! command -v gitleaks &>/dev/null; then
-    echo "SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt doctor)" >&2
+    echo "SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)" >&2
     exit 0
 fi
 
@@ -82,10 +80,12 @@ Fix: Remove the secret from staged files. Use environment variables or a secret 
 False positive? Add the fingerprint to .gitleaksignore
 Bypass once: export SKIP_GITLEAKS=1 in your shell, then retry"
     block_emit "gitleaks" "$REASON"
-    # Write advisory result file for summary when strict=false (block_emit only warns)
+    # Always write result file so scan-summary can aggregate findings
+    mkdir -p "$SEATBELT_RESULT_DIR"
     if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
-        mkdir -p "$SEATBELT_RESULT_DIR"
         echo "1 finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/gitleaks"
+    else
+        echo "1 finding(s) (blocked)" >> "$SEATBELT_RESULT_DIR/gitleaks"
     fi
     exit 0
 fi

@@ -12,11 +12,16 @@ block_emit() {
     local scanner="$1" reason="$2"
     if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
         echo "SEATBELT: $scanner would block: $reason" >&2
-    elif command -v jq &>/dev/null; then
+        return
+    fi
+    if command -v jq &>/dev/null; then
         jq -n --arg r "$reason" '{"decision":"block","reason":$r}'
+    elif command -v python3 &>/dev/null; then
+        python3 -c "import json,sys; print(json.dumps({'decision':'block','reason':sys.argv[1]}))" "$reason"
     else
+        # Last resort: escape backslash, double-quote, and control chars
         local escaped
-        escaped=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | head -c 2000)
+        escaped=$(printf '%s' "$reason" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n\r' '  ' | head -c 2000)
         printf '{"decision":"block","reason":"%s"}\n' "$escaped"
     fi
 }

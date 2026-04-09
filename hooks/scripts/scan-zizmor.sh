@@ -51,6 +51,16 @@ fi
 SCAN_DIR=$(mktemp -d)
 trap 'rm -rf "$SCAN_DIR"' EXIT
 
+# ── Portable timeout for zizmor (scan-wide, not per-file) ────────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_ZIZMOR_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_ZIZMOR_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_ZIZMOR_TIMEOUT"
+    fi
+fi
+
 EXTRACTED=0
 EXPECTED=0
 _ZIZMOR_BLOCK_REASONS=""
@@ -70,20 +80,10 @@ while IFS= read -r -d '' wf; do
     git show ":$wf" > "$SCAN_DIR/$wf" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
 
-    # ── Portable timeout for zizmor ─────────────────────────────────
-    _ZIZMOR_TIMEOUT_CMD=""
-    if [ -n "${SEATBELT_ZIZMOR_TIMEOUT:-}" ]; then
-        if command -v timeout &>/dev/null; then
-            _ZIZMOR_TIMEOUT_CMD="timeout $SEATBELT_ZIZMOR_TIMEOUT"
-        elif command -v gtimeout &>/dev/null; then
-            _ZIZMOR_TIMEOUT_CMD="gtimeout $SEATBELT_ZIZMOR_TIMEOUT"
-        fi
-    fi
-
     _ZIZMOR_EXIT=0
-    if [ -n "$_ZIZMOR_TIMEOUT_CMD" ]; then
+    if [ -n "$TIMEOUT_CMD" ]; then
         # shellcheck disable=SC2086
-        SCAN_OUTPUT=$($_ZIZMOR_TIMEOUT_CMD zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
+        SCAN_OUTPUT=$($TIMEOUT_CMD zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
     else
         SCAN_OUTPUT=$(zizmor --no-progress --format json "$SCAN_DIR/$wf" 2>&1) || _ZIZMOR_EXIT=$?
     fi
@@ -189,8 +189,12 @@ try:
             print('yes')
             sys.exit(0)
 except Exception:
-    pass
+    print('error')
 " 2>/dev/null || true)
+                if [ "$_zizmor_has_blocking" = "error" ]; then
+                    echo "SEATBELT: zizmor: severity gating could not parse scan output — treating as blocking" >&2
+                    _zizmor_has_blocking="yes"
+                fi
                 if [ "$_zizmor_has_blocking" = "yes" ]; then
                     _ZIZMOR_BLOCK_REASONS="${_ZIZMOR_BLOCK_REASONS}${FINDING_COUNT} issue(s) in $(basename "$wf"); "
                 fi

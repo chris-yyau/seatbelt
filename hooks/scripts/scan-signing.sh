@@ -26,9 +26,20 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_SIGNING_ENABLED" = "false" ] && exit 0
 
+# ── Portable timeout (config-driven) ─────────────────────────────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_SIGNING_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_SIGNING_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_SIGNING_TIMEOUT"
+    fi
+fi
+
 # ── Check if commit is already being signed ───────────────────────
 # Check 1: Is -S or --gpg-sign in the commit command?
-CMD_HAS_SIGN=$(printf '%s' "$HOOK_DATA" | python3 -c "
+# shellcheck disable=SC2086
+CMD_HAS_SIGN=$(printf '%s' "$HOOK_DATA" | ${TIMEOUT_CMD:+$TIMEOUT_CMD} python3 -c "
 import sys, json, re, shlex
 try:
     d = json.load(sys.stdin)

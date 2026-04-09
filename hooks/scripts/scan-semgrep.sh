@@ -175,8 +175,12 @@ try:
             print('yes')
             sys.exit(0)
 except Exception:
-    pass
+    print('error')
 " 2>/dev/null || true)
+        if [ "$_semgrep_has_blocking" = "error" ]; then
+            echo "SEATBELT: semgrep: severity gating could not parse scan output — treating as blocking" >&2
+            _semgrep_has_blocking="yes"
+        fi
         if [ "$_semgrep_has_blocking" = "yes" ]; then
             block_emit "semgrep" "${FINDING_COUNT} finding(s) at or above ${SEATBELT_SEMGREP_SEVERITY} severity"
         fi

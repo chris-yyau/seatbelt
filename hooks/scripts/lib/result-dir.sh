@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Shared result directory computation for seatbelt hooks.
 # Usage: source this file to set SEATBELT_RESULT_DIR.
-# Uses a repo-specific hash to avoid collisions between concurrent commits
-# in different repos/worktrees. Override with SEATBELT_RESULT_DIR env var.
+# Uses a repo-specific hash + parent PID to avoid collisions between
+# concurrent commits in different repos/worktrees and parallel hook runs.
+# Override with SEATBELT_RESULT_DIR env var.
 
 if [ -z "${SEATBELT_RESULT_DIR:-}" ]; then
     _seatbelt_base="${TMPDIR:-/tmp}"
@@ -22,6 +23,7 @@ if [ -z "${SEATBELT_RESULT_DIR:-}" ]; then
     if [ -z "$_seatbelt_hash" ]; then
         _seatbelt_hash=$(printf '%s' "$_seatbelt_toplevel" | tr '/' '_' | tr -cd '[:alnum:]_-')
     fi
-    SEATBELT_RESULT_DIR="${_seatbelt_base}/seatbelt-results-${_seatbelt_hash}"
+    # Include PPID to isolate concurrent hook invocations from different commits
+    SEATBELT_RESULT_DIR="${_seatbelt_base}/seatbelt-results-${_seatbelt_hash}-${PPID:-$$}"
     unset _seatbelt_base _seatbelt_toplevel _seatbelt_hash
 fi

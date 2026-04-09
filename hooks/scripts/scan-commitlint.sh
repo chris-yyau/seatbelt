@@ -26,9 +26,20 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_COMMITLINT_ENABLED" = "false" ] && exit 0
 
+# ── Portable timeout (config-driven) ─────────────────────────────
+TIMEOUT_CMD=""
+if [ -n "${SEATBELT_COMMITLINT_TIMEOUT:-}" ]; then
+    if command -v timeout &>/dev/null; then
+        TIMEOUT_CMD="timeout $SEATBELT_COMMITLINT_TIMEOUT"
+    elif command -v gtimeout &>/dev/null; then
+        TIMEOUT_CMD="gtimeout $SEATBELT_COMMITLINT_TIMEOUT"
+    fi
+fi
+
 # ── Extract commit message from HOOK_DATA ─────────────────────────
 # Parse the git commit command to find -m/--message argument
-COMMIT_MSG=$(printf '%s' "$HOOK_DATA" | python3 -c "
+# shellcheck disable=SC2086
+COMMIT_MSG=$(printf '%s' "$HOOK_DATA" | ${TIMEOUT_CMD:+$TIMEOUT_CMD} python3 -c "
 import sys, json, re, shlex
 try:
     d = json.load(sys.stdin)
@@ -77,8 +88,8 @@ try:
                 else:
                     i += 1
             if msgs:
-                # Use first -m message for validation
-                print(msgs[0])
+                # Use last -m message for validation (matches git behavior)
+                print(msgs[-1])
             break
 except Exception:
     pass
