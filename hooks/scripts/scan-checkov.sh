@@ -43,20 +43,17 @@ elif python3 -c "import checkov" &>/dev/null 2>&1; then
 fi
 
 if [ -z "$CHECKOV_CMD" ]; then
-    echo "SEATBELT DEGRADED: checkov not installed — IaC scanning DISABLED (pip3 install checkov | /seatbelt doctor)" >&2
+    echo "SEATBELT DEGRADED: checkov not installed — IaC scanning DISABLED (pip3 install checkov | /seatbelt:doctor)" >&2
     exit 0
 fi
 
-# ── Extract staged IaC files to temp dir ──────────────────────────
-# Each staged file is extracted individually via `git show ":path"`.
-# Known limitation: multi-file IaC configs (e.g. Terraform modules with
-# relative `source` paths) that span multiple staged files may produce
-# parse errors in checkov because neighbour files are absent from SCAN_DIR.
-# Those files are skipped (fail-open) with a SEATBELT warning on stderr.
+# ── Extract ALL staged IaC files to temp dir ─────────────────────
+# Files are extracted preserving directory structure so multi-file IaC
+# configs (Terraform modules, Helm charts, Kustomize) resolve correctly.
 SCAN_DIR=$(mktemp -d)
 trap 'rm -rf "$SCAN_DIR"' EXIT
 
-# ── Portable timeout (config-driven, no default for checkov) ─────
+# ── Portable timeout (config-driven) ─────────────────────────────
 TIMEOUT_CMD=""
 if [ -n "${SEATBELT_CHECKOV_TIMEOUT:-}" ]; then
     if command -v timeout &>/dev/null; then
@@ -66,22 +63,18 @@ if [ -n "${SEATBELT_CHECKOV_TIMEOUT:-}" ]; then
     fi
 fi
 
-BLOCKED=0
-BLOCKED_COUNT=0
-BLOCK_DETAILS=""
 EXTRACTED=0
 EXPECTED=0
 while IFS= read -r -d '' staged_file; do
     [ -z "$staged_file" ] && continue
 
-    FRAMEWORK=""
     case "$staged_file" in
-        *Dockerfile*|*dockerfile*)                              FRAMEWORK="dockerfile" ;;
-        *.tf|*.tf.json)                                         FRAMEWORK="terraform" ;;
-        *docker-compose*.yml|*docker-compose*.yaml)             FRAMEWORK="docker_compose" ;;
-        .github/workflows/*.yml|.github/workflows/*.yaml)       FRAMEWORK="github_actions" ;;
-        *k8s*/*.yml|*k8s*/*.yaml|*kubernetes*/*.yml|*kubernetes*/*.yaml) FRAMEWORK="kubernetes" ;;
-        *helm*/*.yml|*helm*/*.yaml)                             FRAMEWORK="helm" ;;
+        *Dockerfile*|*dockerfile*)                              ;;
+        *.tf|*.tf.json)                                         ;;
+        *docker-compose*.yml|*docker-compose*.yaml)             ;;
+        .github/workflows/*.yml|.github/workflows/*.yaml)       ;;
+        *k8s*/*.yml|*k8s*/*.yaml|*kubernetes*/*.yml|*kubernetes*/*.yaml) ;;
+        *helm*/*.yml|*helm*/*.yaml)                             ;;
         *)                                                      continue ;;
     esac
 
@@ -93,27 +86,35 @@ while IFS= read -r -d '' staged_file; do
     mkdir -p "$SCAN_DIR/$(dirname "$staged_file")" 2>/dev/null || continue
     git show ":$staged_file" > "$SCAN_DIR/$staged_file" 2>/dev/null || continue
     EXTRACTED=$((EXTRACTED + 1))
+done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
-    SCAN_EXIT=0
-    if [ -n "$TIMEOUT_CMD" ]; then
-        # shellcheck disable=SC2086
-        SCAN_OUTPUT=$($TIMEOUT_CMD $CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || SCAN_EXIT=$?
-    else
-        SCAN_OUTPUT=$($CHECKOV_CMD --file "$SCAN_DIR/$staged_file" --framework "$FRAMEWORK" --quiet --output json 2>&1) || SCAN_EXIT=$?
-    fi
+[ "$EXPECTED" -eq 0 ] && exit 0
 
-    # Detect timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
-    if [ "$SCAN_EXIT" -eq 124 ] || [ "$SCAN_EXIT" -eq 137 ]; then
-        echo "SEATBELT DEGRADED: checkov timed out after ${SEATBELT_CHECKOV_TIMEOUT}s on $(basename "$staged_file")" >&2
-        continue
-    fi
+if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
+    echo "SEATBELT: checkov: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+fi
 
-    # Parse JSON for findings
-    FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
+# ── Run checkov on entire directory at once ──────────────────────
+SCAN_EXIT=0
+if [ -n "$TIMEOUT_CMD" ]; then
+    # shellcheck disable=SC2086
+    SCAN_OUTPUT=$($TIMEOUT_CMD $CHECKOV_CMD --directory "$SCAN_DIR" --quiet --output json 2>&1) || SCAN_EXIT=$?
+else
+    SCAN_OUTPUT=$($CHECKOV_CMD --directory "$SCAN_DIR" --quiet --output json 2>&1) || SCAN_EXIT=$?
+fi
+
+# Detect timeout (exit 124 from coreutils timeout, 137 from SIGKILL)
+if [ "$SCAN_EXIT" -eq 124 ] || [ "$SCAN_EXIT" -eq 137 ]; then
+    echo "SEATBELT DEGRADED: checkov timed out after ${SEATBELT_CHECKOV_TIMEOUT:-?}s — scan skipped" >&2
+    exit 0
+fi
+
+# Parse JSON for findings
+FINDING_INFO=$(printf '%s' "$SCAN_OUTPUT" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
-    # Handle both top-level dict (single file) and list (multi-file) shapes
+    # Handle both top-level dict (single dir) and list (multi-framework) shapes
     if isinstance(data, list):
         failed_checks = []
         for item in data:
@@ -139,36 +140,32 @@ except Exception:
     print('-1|')
 " 2>/dev/null || echo "-1|")
 
-    FINDING_COUNT="${FINDING_INFO%%|*}"
-    FINDING_SUMMARY="${FINDING_INFO#*|}"
+FINDING_COUNT="${FINDING_INFO%%|*}"
+FINDING_SUMMARY="${FINDING_INFO#*|}"
+BLOCKED=0
+BLOCKED_COUNT=0
+BLOCK_DETAILS=""
 
-    # Fallback to grep if JSON parse failed
-    if [ "$FINDING_COUNT" = "-1" ]; then
-        FAILED=$(echo "$SCAN_OUTPUT" | grep -c "FAILED" 2>/dev/null || true)
-        FAILED=${FAILED:-0}
-        PARSE_ERRORS=$(echo "$SCAN_OUTPUT" | grep -cE "Parsing errors:" 2>/dev/null || true)
-        PARSE_ERRORS=${PARSE_ERRORS:-0}
+# Fallback to grep if JSON parse failed
+if [ "$FINDING_COUNT" = "-1" ]; then
+    FAILED=$(echo "$SCAN_OUTPUT" | grep -c "FAILED" 2>/dev/null || true)
+    FAILED=${FAILED:-0}
+    PARSE_ERRORS=$(echo "$SCAN_OUTPUT" | grep -cE "Parsing errors:" 2>/dev/null || true)
+    PARSE_ERRORS=${PARSE_ERRORS:-0}
 
-        if [ "$FAILED" -gt 0 ]; then
-            BLOCKED=1
-            BLOCKED_COUNT=$((BLOCKED_COUNT + FAILED))
-            BLOCK_DETAILS="${BLOCK_DETAILS}$(echo "$SCAN_OUTPUT" | grep "FAILED" | head -3)\n"
-        elif [ "$PARSE_ERRORS" -gt 0 ]; then
-            echo "SEATBELT: checkov parse error in $(basename "$staged_file") — skipping" >&2
-        fi
-    else
-        if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
-            BLOCKED=1
-            BLOCKED_COUNT=$((BLOCKED_COUNT + FINDING_COUNT))
-            BLOCK_DETAILS="${BLOCK_DETAILS}${FINDING_SUMMARY}\n"
-        fi
+    if [ "$FAILED" -gt 0 ]; then
+        BLOCKED=1
+        BLOCKED_COUNT=$FAILED
+        BLOCK_DETAILS="$(echo "$SCAN_OUTPUT" | grep "FAILED" | head -5)\n"
+    elif [ "$PARSE_ERRORS" -gt 0 ]; then
+        echo "SEATBELT: checkov parse errors in staged IaC files — results may be incomplete" >&2
     fi
-done < <(git diff -z --cached --name-only --diff-filter=ACMR 2>/dev/null)
-
-[ "$EXPECTED" -eq 0 ] && exit 0
-
-if [ "$EXTRACTED" -lt "$EXPECTED" ]; then
-    echo "SEATBELT: checkov: extracted $EXTRACTED/$EXPECTED staged files (some skipped)" >&2
+else
+    if [ "$FINDING_COUNT" -gt 0 ] 2>/dev/null; then
+        BLOCKED=1
+        BLOCKED_COUNT=$FINDING_COUNT
+        BLOCK_DETAILS="${FINDING_SUMMARY}\n"
+    fi
 fi
 
 # ── Emit results ────────────────────────────────────────────────────
@@ -183,10 +180,12 @@ Fix: Address the failed checks listed above.
 False positive? Add #checkov:skip=CKV_XXX:reason above the affected line
 Bypass once: export SKIP_CHECKOV=1 in your shell, then retry"
     block_emit "checkov" "$REASON"
-    # Write advisory result file for summary when strict=false (block_emit only warns)
+    # Always write result file so scan-summary can aggregate findings
+    mkdir -p "$SEATBELT_RESULT_DIR"
     if [ "${SEATBELT_STRICT:-true}" = "false" ]; then
-        mkdir -p "$SEATBELT_RESULT_DIR"
         echo "${BLOCKED_COUNT} finding(s) (downgraded from block)" >> "$SEATBELT_RESULT_DIR/checkov"
+    else
+        echo "${BLOCKED_COUNT} finding(s) (blocked)" >> "$SEATBELT_RESULT_DIR/checkov"
     fi
 fi
 

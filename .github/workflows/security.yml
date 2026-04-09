@@ -55,6 +55,42 @@ defaults:
     shell: bash
 
 jobs:
+  gitleaks:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_8.24.0_linux_x64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Scan for secrets
+        run: gitleaks detect --source . --verbose --exit-code 1
+
+  shellcheck-ci:
+    name: Shell script quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Lint shell scripts
+        run: shellcheck hooks/scripts/scan-*.sh hooks/scripts/lib/*.sh scripts/doctor.sh
+
   trivy:
     name: Dependency CVEs
     runs-on: ubuntu-latest
@@ -139,12 +175,14 @@ jobs:
 
   reports:
     if: always()
-    needs: [trivy, semgrep, checkov, zizmor]
+    needs: [gitleaks, shellcheck-ci, trivy, semgrep, checkov, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Write summary
         env:
+          GITLEAKS: ${{ needs.gitleaks.result }}
+          SHELLCHECK_CI: ${{ needs.shellcheck-ci.result }}
           TRIVY: ${{ needs.trivy.result }}
           SEMGREP: ${{ needs.semgrep.result }}
           CHECKOV: ${{ needs.checkov.result }}
@@ -154,6 +192,8 @@ jobs:
             echo "## Security Backstop"
             echo "| Scanner | Result |"
             echo "|---------|--------|"
+            echo "| gitleaks | $GITLEAKS |"
+            echo "| shellcheck | $SHELLCHECK_CI |"
             echo "| trivy | $TRIVY |"
             echo "| semgrep | $SEMGREP |"
             echo "| checkov | $CHECKOV |"
