@@ -1,6 +1,6 @@
 {
   "private": true,
-  "version": "3.1.0",
+  "version": "1.6.2",
   "name": "seatbelt",
   "description": "Zero-config security scanning for vibe coders"
 }
