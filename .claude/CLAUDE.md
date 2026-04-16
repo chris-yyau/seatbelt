@@ -33,15 +33,16 @@ tests/
 
 Every scanner follows the same structure:
 
-1. Check `SKIP_SEATBELT` / `SKIP_{SCANNER}` env vars
-2. Source `lib/detect-commit.sh` — exit if not a git commit
-3. Source `lib/result-dir.sh` — clean stale result file
-4. Source `lib/config.sh` — load `.seatbelt.yml` settings
-5. Check enabled flag — exit if disabled
-6. Check scanner installed — fail-open with stderr warning if missing
-7. Run scanner on staged content
-8. Source `lib/block-emit.sh` — emit block decision if findings meet threshold
-9. Write result file for summary aggregation
+1. Source `lib/skip-audit.sh` (fail-safe: `|| true` — missing lib can't disable scanner)
+2. Check `SKIP_SEATBELT` / `SKIP_{SCANNER}` env vars — log bypass to `.claude/bypass-log.jsonl` via `seatbelt_log_skip`, then exit (`{ log; exit 0; }` pattern ensures skip is unconditional regardless of log success)
+3. Source `lib/detect-commit.sh` — exit if not a git commit
+4. Source `lib/result-dir.sh` — clean stale result file
+5. Source `lib/config.sh` — load `.seatbelt.yml` settings
+6. Check enabled flag — exit if disabled
+7. Check scanner installed — fail-open with stderr warning if missing
+8. Run scanner on staged content
+9. Source `lib/block-emit.sh` — emit block decision if findings meet threshold
+10. Write result file for summary aggregation
 
 **Fail-open by default:** Missing scanners warn but don't block. Script errors trapped with `exit 0`.
 
@@ -52,6 +53,8 @@ Every scanner follows the same structure:
 Precedence: **env var > `.seatbelt.yml` > default**
 
 Key env vars: `SKIP_SEATBELT=1`, `SKIP_{SCANNER}=1`, `SEATBELT_{SCANNER}_ENABLED`, `SEATBELT_STRICT`, `SEATBELT_{SCANNER}_SEVERITY`, `SEATBELT_{SCANNER}_TIMEOUT`
+
+**Bypass audit trail:** Every `SKIP_*` bypass is logged to `.claude/bypass-log.jsonl` (gitignored) with timestamp, scanner name, env var used, and git HEAD. Logging is fail-open — errors never block commits.
 
 ## Testing
 
