@@ -117,11 +117,16 @@ chore: bump CI action versions
 
 To add a new scanner hook:
 
-1. Create `hooks/scripts/scan-<name>.sh` following the existing pattern:
-   - Source `lib/detect-commit.sh` for commit detection
-   - Source `lib/config.sh` for `.seatbelt.yml` config support
-   - Check `SKIP_<NAME>` and `SKIP_SEATBELT` env vars
-   - Handle missing binary gracefully (degraded mode)
+1. Create `hooks/scripts/scan-<name>.sh` following the existing pattern. Source the shared libs in this order:
+   - `lib/skip-audit.sh` — first, so `SKIP_*` exits can call `seatbelt_log_skip` for audit trail
+   - `lib/detect-commit.sh` — exits if the Bash command isn't a `git commit`
+   - `lib/result-dir.sh` — sets `$SEATBELT_RESULT_DIR`; clean your own stale result file
+   - `lib/config.sh` — loads `.seatbelt.yml` and sets `SEATBELT_<NAME>_ENABLED` / severity / timeout
+   - `lib/block-emit.sh` — provides `emit_block` for findings that cross the threshold
+
+   Then:
+   - Check `SKIP_<NAME>` and `SKIP_SEATBELT` env vars (log via `seatbelt_log_skip` before exit)
+   - Handle missing binary gracefully (degraded mode — fail-open with stderr warning)
    - Use `BLOCK` or `warn` fail mode consistently
    - Write warn findings to `$SEATBELT_RESULT_DIR/<name>` for the summary
 
