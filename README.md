@@ -154,7 +154,7 @@ export SKIP_COMMITLINT=1
 export SKIP_SIGNING=1
 ```
 
-> **Audit trail:** Every `SKIP_*` bypass is logged to `.claude/bypass-log.jsonl` with timestamp, scanner name, and git HEAD.
+> **Audit trail:** Each scanner hook logs its `SKIP_*` bypass to `.claude/bypass-log.jsonl` with timestamp, scanner name, and git HEAD.
 
 Suppress specific findings:
 - **gitleaks**: Add the fingerprint to `.gitleaksignore`
