@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Zero-config security scanning for vibe coders",
-    "version": "1.8.0"
+    "version": "1.8.1"
   },
   "plugins": [
     {
