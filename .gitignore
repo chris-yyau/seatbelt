@@ -1,5 +1,10 @@
 .worktrees/
 *.local
+.DS_Store
 .claude/bypass-log.jsonl
+.claude/review-metrics.jsonl
+.claude/sessions/
+.claude/toctou-parse.log
 docs/reviews/
 docs/superpowers/
+docs/plans/
