@@ -7,8 +7,10 @@ set -euo pipefail
 trap 'exit 0' ERR  # fail-open on script errors
 
 # ── Skip overrides ──────────────────────────────────────────────────
-[ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
-[ "${SKIP_SEMGREP:-0}" = "1" ] && exit 0
+# shellcheck disable=SC1091
+source "$(cd "$(dirname "$0")" && pwd)/lib/skip-audit.sh" || true
+[ "${SKIP_SEATBELT:-0}" = "1" ] && { seatbelt_log_skip "semgrep" "SKIP_SEATBELT"; exit 0; }
+[ "${SKIP_SEMGREP:-0}" = "1" ] && { seatbelt_log_skip "semgrep" "SKIP_SEMGREP"; exit 0; }
 
 # ── Detect git commit via shared library ─────────────────────────
 # shellcheck disable=SC2034  # HOOK_DATA is consumed by sourced detect-commit.sh

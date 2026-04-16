@@ -15,6 +15,7 @@ hooks/
       config.sh           # Shared: loads .seatbelt.yml, sets SEATBELT_* vars
       block-emit.sh       # Shared: emits {"decision":"block"} JSON or stderr warning
       result-dir.sh       # Shared: repo-specific tmp dir for scanner results
+      skip-audit.sh       # Shared: logs SKIP_* bypass events to .claude/bypass-log.jsonl
 commands/
   doctor.md               # /seatbelt:doctor command
   scan.md                 # /seatbelt:scan command

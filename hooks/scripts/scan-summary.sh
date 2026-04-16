@@ -5,6 +5,7 @@
 
 set -euo pipefail
 
+# ── Skip override (no audit log — summary is an aggregator, not a scanner) ──
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
 
 # ── Detect git commit via shared library ─────────────────────
