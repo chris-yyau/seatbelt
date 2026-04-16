@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Log when a seatbelt scanner is skipped via SKIP_* env vars.
 # Usage: source this file, then call seatbelt_log_skip <scanner> <env_var>
-# Writes to .claude/bypass-log.jsonl in the repo root (same as litmus gate).
+# Writes to .claude/bypass-log.jsonl in the repo root.
 # Fail-open: logging errors never block the commit.
+# Always returns 0 — callers chain with `&& exit 0`.
+# SAFETY: $scanner and $env_var must be hardcoded literals, not user input.
 
 seatbelt_log_skip() {
   local scanner="${1:-unknown}" env_var="${2:-unknown}"

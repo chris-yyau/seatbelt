@@ -120,7 +120,8 @@ Claude Code                        Seatbelt Plugin
   Shared library: hooks/scripts/lib/
     ├── detect-commit.sh   (JSON parsing, commit detection)
     ├── result-dir.sh      (temp directory management)
-    └── config.sh          (.seatbelt.yml config loader)
+    ├── config.sh          (.seatbelt.yml config loader)
+    └── skip-audit.sh      (SKIP_* bypass audit logging)
 ```
 
 ## How setup works
@@ -152,6 +153,8 @@ export SKIP_SHELLCHECK=1
 export SKIP_COMMITLINT=1
 export SKIP_SIGNING=1
 ```
+
+> **Audit trail:** Every `SKIP_*` bypass is logged to `.claude/bypass-log.jsonl` with timestamp, scanner name, and git HEAD.
 
 Suppress specific findings:
 - **gitleaks**: Add the fingerprint to `.gitleaksignore`
