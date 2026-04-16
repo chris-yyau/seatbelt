@@ -180,10 +180,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Harden the runner
-        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # v2.16.1
-        with:
-          egress-policy: audit
       - name: Write summary
         env:
           GITLEAKS: ${{ needs.gitleaks.result }}
