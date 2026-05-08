@@ -1,5 +1,5 @@
 ---
-name: doctor
+name: seatbelt-doctor
 description: Check scanner health, show health score, and suggest /seatbelt:setup for missing tools
 ---
 
