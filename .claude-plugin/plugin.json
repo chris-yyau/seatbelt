@@ -1,6 +1,6 @@
 {
   "name": "seatbelt",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Zero-config security scanning for vibe coders. Integrates gitleaks, checkov, trivy, zizmor, semgrep, shellcheck, commitlint, and signing as pre-commit hooks.",
   "author": {
     "name": "seatbelt contributors"
