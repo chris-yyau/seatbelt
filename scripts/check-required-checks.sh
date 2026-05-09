@@ -478,8 +478,13 @@ fi
 # (b) Lock vs branch protection — names in lock.required must equal the
 #     server's required_status_checks.contexts (set equality).
 # ────────────────────────────────────────────────────────────────────
+# Both early-exit paths below print explicit `[c] Skipped …` lines alongside
+# the `[b]` label. Without it, output ends with `[a] ok / [d] ok / [b] Skipped`
+# and the operator can't tell whether (c) was intentionally skipped or simply
+# never ran. The exit code is unchanged — these are output-only additions.
 if [[ "$LOCAL_ONLY" -eq 1 ]]; then
   echo "[b] Skipped (--local-only)"
+  echo "[c] Skipped (--local-only)"
   exit "$drift"
 fi
 
@@ -494,6 +499,7 @@ if ! command -v gh >/dev/null 2>&1; then
     exit 1
   fi
   echo "[b] Skipped (gh CLI not installed). Re-run with gh available or pass --local-only."
+  echo "[c] Skipped (gh CLI not installed)."
   exit "$drift"
 fi
 
