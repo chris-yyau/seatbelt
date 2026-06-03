@@ -23,6 +23,7 @@ commands/
 scripts/
   doctor.sh               # Health check script (JSON output)
   bump-version.sh         # Version sync across manifests
+  check-required-checks.sh # Validates .github/required-checks.lock vs workflows + branch protection
 tests/
   run-tests.sh            # Test runner with assertion helpers
   test-*.sh               # 18 test files, 141 assertions
@@ -86,6 +87,7 @@ Version numbers are managed across three manifests (declared in `.version-bump.j
 | `release.yml` | push to main | semantic-release + SLSA attestation |
 | `scorecard.yml` | weekly cron | OpenSSF Scorecard |
 | `pinact.yml` | push to main (workflow changes) | Auto-pin actions to SHA |
+| `dependabot-auto-merge.yml` | Dependabot PRs | Approve + auto-merge safe patch/minor bumps (opt-in via `vars.DEPENDABOT_AUTO_APPROVE`) |
 
 ## Conventions
 
