@@ -8,3 +8,6 @@
 docs/reviews/
 docs/superpowers/
 docs/plans/
+
+# CodeGraph local index (regenerable from source — never commit)
+.codegraph/
