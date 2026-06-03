@@ -1,0 +1,360 @@
+name: Admin Bypass Audit
+
+# Scheduled backstop audit: detects commits that reached `main` WITHOUT a merged
+# pull request — i.e. admin bypasses of the required-status-checks gate — and
+# opens a labeled GitHub issue for each.
+#
+# THREAT MODEL: best-effort visibility into ACCIDENTAL or routine bypasses by a
+# trusted maintainer. It is NOT a hard control against a malicious admin, who
+# can disable this workflow, force-push, or delete the issues it files. The goal
+# is an after-the-fact paper trail, not prevention.
+#
+# DETECTION (authoritative source of truth):
+# - Commit set: a persisted watermark (last audited `main` HEAD, cached between
+#   runs) plus `compare/<watermark>...main`, which returns the complete set of
+#   commits added to `main` since the last audit, by graph reachability. This is
+#   immune to commit-date forging (the commits API `since` filter is not) and to
+#   Events-API eviction (the events feed is capped/evictable). The watermark is a
+#   best-effort optimization, NOT trusted blindly: it is validated as an ancestor
+#   of HEAD each run (caches are mutable/best-effort; a force-push could orphan
+#   it), and on any doubt the run falls back to a baseline (latest tag, then ~30
+#   commits back). Dedup makes a wider fallback harmless (re-audit, don't miss).
+# - Bypass test: per commit, the PR-association API filtered to PRs actually
+#   MERGED into `main` (merged_at != null AND base.ref == "main"). Not forgeable.
+# - Run fails (non-zero) if a detected bypass cannot be filed — a green run means
+#   every detection was recorded.
+#
+# ATTRIBUTION (best-effort): the pusher login comes from the Events API
+# PushEvent (server-recorded, not forgeable) when still in the feed; otherwise it
+# falls back to the commit author (forgeable metadata, marked "unverified").
+# Attribution only labels the issue and suppresses known-automation noise — it
+# never gates detection.
+#
+# Why scheduled, not `on: push`: GitHub skips push-triggered workflows when the
+# head commit carries a CI-skip marker (`[skip ci]`, …), so a push-only audit is
+# trivially evaded. Scheduled runs are not skippable. Manual via workflow_dispatch.
+#
+# ACCEPTED RESIDUAL LIMITATIONS (irreducible without an org audit log / GitHub
+# Enterprise — documented rather than papered over):
+# - Watermark cache eviction (GitHub caches are best-effort, ~7d idle): on a miss
+#   the sweep falls back to the latest tag, then ~30 commits back. A commit older
+#   than the fallback that was never swept could escape; a daily cadence keeps the
+#   cache warm so misses are rare.
+# - `compare` paginates the commit list (handled here via `--paginate`), so a
+#   large push is covered; the cost is extra API pages, not missed commits.
+# - Automation suppression relies on forgeable commit-author metadata only when
+#   the real PushEvent has aged out of the events feed.
+# - `gh pr merge --admin` associates the merge commit WITH a PR, so it reads as a
+#   normal merge here.
+#
+# SECURITY: all API-sourced values (pusher/author login) are bound to shell
+# variables and quoted — never interpolated into a command.
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  # Ref-INDEPENDENT singleton: every run (scheduled or manual on any ref) audits
+  # the shared `main` history and the single shared watermark cache, so they must
+  # serialize. Scoping by github.ref would let a manual run race the scheduled one
+  # on issue creation and the watermark.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write        # create audit issues
+      contents: read       # compare / commits / events / tags
+      pull-requests: read  # resolve PR association per commit
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      # Rolling watermark cache: key is always new (run_id) so the post-job save
+      # always writes on success; restore-keys picks the most recent prior entry.
+      # The file holds the last audited `main` HEAD SHA. (Per GitHub's documented
+      # "always update the cache" idiom — a never-exact key forces the save.)
+      - name: Restore audit watermark
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: .audit-watermark
+          key: bypass-audit-wm-${{ github.run_id }}
+          restore-keys: |
+            bypass-audit-wm-
+
+      - name: Sweep commits added to main without a merged PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          WATERMARK_FILE=".audit-watermark"
+
+          # Resolve current main HEAD — the compare target and next watermark.
+          HEAD_SHA=$(gh api "repos/$REPO/commits/main" --jq '.sha' 2>/dev/null) || {
+            echo "::error::could not resolve main HEAD"; exit 1; }
+
+          # Resolve the compare BASE. Prefer the persisted watermark, but VALIDATE
+          # it is an ancestor of HEAD before trusting it — caches are mutable and
+          # best-effort, and a force-push to main could orphan an old value, so a
+          # stale/poisoned watermark must not silently shrink the audited range.
+          # On any doubt fall back to the latest tag, then ~30 commits back.
+          BASE=""
+          if [[ -s "$WATERMARK_FILE" ]]; then
+            CAND=$(tr -cd '0-9a-fA-F' < "$WATERMARK_FILE")
+            if [[ -n "$CAND" ]]; then
+              # compare/BASE...HEAD reports HEAD's relationship to BASE: `ahead`
+              # means HEAD has commits beyond BASE (BASE is an ancestor — the
+              # normal case with new commits to audit); `identical` means no new
+              # commits. `behind`/`diverged` mean BASE is not an ancestor of HEAD
+              # (stale/orphaned/poisoned watermark) — discard and fall back.
+              status=$(gh api "repos/$REPO/compare/$CAND...$HEAD_SHA" --jq '.status' 2>/dev/null || echo "")
+              case "$status" in
+                ahead|identical) BASE="$CAND" ;;
+                *) echo "watermark $CAND is not an ancestor of HEAD (status=${status:-error}) — discarding" ;;
+              esac
+            fi
+          fi
+          if [[ -z "$BASE" ]]; then
+            BASE=$(gh api "repos/$REPO/tags" --jq '.[0].name // ""' 2>/dev/null || echo "")
+            [[ -n "$BASE" ]] && echo "watermark unavailable — falling back to latest tag: $BASE"
+          fi
+          if [[ -z "$BASE" ]]; then
+            BASE=$(gh api "repos/$REPO/commits?sha=main&per_page=30" --jq '.[-1].sha // ""' 2>/dev/null || echo "")
+            [[ -n "$BASE" ]] && echo "no tags — falling back to ~30 commits back: $BASE"
+          fi
+          if [[ -z "$BASE" ]]; then
+            echo "::error::could not determine an audit base (watermark, tag, and commit fallbacks all failed)"; exit 1
+          fi
+
+          # Best-effort pusher map (sha -> real pusher) from PushEvents to main.
+          # Attribution/automation-suppression only; never gates detection.
+          declare -A PUSHER
+          EVENTS=$(gh api "repos/$REPO/events" --paginate 2>/dev/null || echo "[]")
+          while IFS=$'\t' read -r p s; do
+            [[ -n "$s" ]] && PUSHER["$s"]="$p"
+          done < <(printf '%s' "$EVENTS" | jq -r '
+            .[] | select(.type == "PushEvent" and .payload.ref == "refs/heads/main")
+            | .actor.login as $a | .payload.commits[]? | "\($a)\t\(.sha)"' 2>/dev/null || true)
+
+          # Complete commit set added to main since BASE (graph-based). PAGINATED:
+          # the compare endpoint defaults to a special unpaged response capped at
+          # 250 commits; passing an explicit `per_page` switches it to standard
+          # pagination so `gh --paginate` follows the Link headers across the full
+          # range (a cache-miss fallback or large push can exceed 250). stderr is
+          # captured to a file (NOT merged via 2>&1) so a benign warning on a
+          # successful call can't be mis-parsed as a commit row. FAIL-CLOSED: a
+          # non-zero exit aborts before the watermark advances, so a failed/partial
+          # fetch never silently drops commits and then marks the range audited.
+          CMP_ERR=$(mktemp)
+          if ! ROWS_RAW=$(gh api --paginate "repos/$REPO/compare/$BASE...$HEAD_SHA?per_page=100" \
+                --jq '.commits[]? | "\(.sha)\t\(.author.login // "")"' 2>"$CMP_ERR"); then
+            echo "::error::compare $BASE...$HEAD_SHA failed: $(tr -d '\r' < "$CMP_ERR" | head -c 400)"
+            rm -f "$CMP_ERR"; exit 1
+          fi
+          rm -f "$CMP_ERR"
+          ROWS=()
+          if [[ -n "$ROWS_RAW" ]]; then mapfile -t ROWS <<< "$ROWS_RAW"; fi
+
+          # Dedup source: the bot's OWN audit-issue titles (issues filed via
+          # GITHUB_TOKEN are authored by github-actions[bot]) — an issue from any
+          # other author, or with a coincidental title, must never suppress a real
+          # audit. FAIL-CLOSED: if the list call errors we cannot dedup, so abort
+          # before filing (avoids duplicate issues) rather than advancing blind.
+          # NOTE: do NOT filter by --label admin-bypass here. The filing paths
+          # below fall back to creating UNLABELED issues when label creation or a
+          # labeled create fails; a label-filtered dedup would never see those and
+          # would re-file the same commit every sweep. --limit 300 fetches the 300
+          # most-recently-updated issues across ALL authors before the jq author
+          # filter selects this bot's audit issues, so the effective dedup window
+          # is "bot audit issues among the 300 newest issues repo-wide". This
+          # repo's low issue volume keeps the audit history well inside that
+          # window; if it ever accumulates >300 newer non-audit issues, raise the
+          # limit.
+          if ! EXISTING_TITLES=$(gh issue list --repo "$REPO" --state all --limit 300 \
+              --json title,author \
+              --jq '.[] | select(.author.login == "github-actions[bot]") | .title' 2>/dev/null); then
+            echo "::error::could not list existing issues for dedup — aborting (fail-closed)"; exit 1
+          fi
+
+          AUDIT_FAILED=0
+
+          is_automation() {
+            case "$1" in
+              *"[bot]"*|github-actions|semantic-release-bot) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # audit_one <sha> <commit-author-login>
+          audit_one() {
+            local sha="$1" author="$2"
+            local pusher who src prs api_ok attempt merge_filter pr_count pr_num
+            local reason kind short legacy_short who_display now body_file title filed label_ok
+
+            # Automation suppression uses ONLY the non-forgeable PushEvent pusher.
+            # If the event has aged out of the feed, do NOT skip on forgeable
+            # commit-author metadata — fall through to the PR check and file if it
+            # is a direct push (fail-closed). Legit bot releases are examined while
+            # their event is still fresh (same-day sweep + advancing watermark), so
+            # this unknown-pusher path only affects old commits re-examined after a
+            # cache-miss fallback, where a closeable false-positive beats a miss.
+            pusher="${PUSHER[$sha]:-}"
+            if [[ -n "$pusher" ]] && is_automation "$pusher"; then
+              echo "skip $sha — automation pusher: $pusher"; return 0
+            fi
+            # Best-effort attribution for the issue body only (never gates skip).
+            if [[ -n "$pusher" ]]; then who="$pusher"; src="push-event";
+            else who="$author"; src="commit-author (unverified)"; fi
+
+            # Merged-PR-into-main test — FAIL-CLOSED on API/parse error. stdout is
+            # kept clean (2>/dev/null) so benign stderr on a successful call can't
+            # corrupt the JSON the parse depends on.
+            prs=""; api_ok=0
+            for attempt in 1 2 3; do
+              if prs=$(gh api "repos/$REPO/commits/$sha/pulls" 2>/dev/null); then api_ok=1; break; fi
+              echo "::warning::PR-lookup attempt $attempt failed for $sha"
+              if [[ "$attempt" -lt 3 ]]; then sleep 5; fi
+            done
+
+            # Count ONLY PRs actually merged into main. `commits/{sha}/pulls` also
+            # returns PRs that merely CONTAIN the commit (open PRs, PRs to other
+            # branches), so a commit cherry-pushed from a PR branch straight to
+            # main would otherwise look merged. A real merge has merged_at != null
+            # AND base.ref == "main".
+            merge_filter='[.[] | select(.merged_at != null and .base.ref == "main")]'
+            if [[ "$api_ok" == "1" ]]; then
+              pr_count=$(printf '%s' "$prs" | jq "$merge_filter | length" 2>/dev/null || echo "parse_error")
+              if [[ "$pr_count" == "parse_error" ]]; then
+                reason="The PR-association API response could not be parsed; bypass status is unverified (fail-closed)."
+                kind="Audit Verification Failed"
+              elif [[ "$pr_count" != "0" ]]; then
+                pr_num=$(printf '%s' "$prs" | jq -r "$merge_filter | .[0].number // \"?\"" 2>/dev/null || echo "?")
+                echo "ok $sha — merged via PR #$pr_num"; return 0
+              else
+                reason="This commit reached \`main\` without a merged pull request, bypassing required status checks and review policy."
+                kind="Admin Bypass"
+              fi
+            else
+              reason="The PR-association API could not be reached after 3 attempts; bypass status is unverified (fail-closed)."
+              kind="Audit Verification Failed"
+            fi
+
+            short=$(printf '%s' "$sha" | cut -c1-12)
+
+            # Non-mentionable attribution: a bare "@<handle>" in the rendered
+            # issue body pings the real GitHub user of that name. Only the
+            # server-recorded PushEvent pusher (src=push-event) is a verified,
+            # non-forgeable identity safe to @mention. The commit-author login is
+            # best-effort and forgeable (craft a matching author email), so the
+            # unverified-author fallback renders as plain, non-mentionable text;
+            # an absent author uses a literal placeholder. None of the three can
+            # ping an uninvolved account.
+            if [[ "$src" == "push-event" && -n "$who" ]]; then
+              who_display="@$who"
+            elif [[ -n "$who" ]]; then
+              who_display="$who"
+            else
+              who_display="(unattributed)"
+            fi
+
+            # Dedup: skip only if one of the bot's own audit issues already names
+            # this commit, matched on exact title delimiters so a coincidental
+            # substring (or non-bot-authored issue) cannot suppress it. The
+            # delimiter is "by " (not "by @") so unattributed titles dedup too.
+            # Also check the legacy 7-char prefix so a title written by an earlier
+            # version of this workflow (keyed on 7 chars) still dedups. This is
+            # inert against current 12-char titles — ": <7-char> by " can never
+            # match "<12-char> by " — so it adds no collision risk.
+            legacy_short=$(printf '%s' "$sha" | cut -c1-7)
+            if printf '%s\n' "$EXISTING_TITLES" | grep -qF ": $short by " \
+               || printf '%s\n' "$EXISTING_TITLES" | grep -qF ": $legacy_short by "; then
+              echo "skip $sha — audit issue already exists"; return 0
+            fi
+
+            echo "::warning::$kind — commit $sha (attribution: ${who:-unknown} via $src)"
+
+            label_ok=1
+            if ! gh label create "admin-bypass" \
+                  --color "d93f0b" \
+                  --description "Commit bypassed required status checks" \
+                  --repo "$REPO" 2>/dev/null; then
+              if ! gh label list --repo "$REPO" --json name --jq '.[].name' 2>/dev/null | grep -qx "admin-bypass"; then
+                label_ok=0
+              fi
+            fi
+
+            body_file=$(mktemp)
+            title="$kind: $short by $who_display"
+            now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            {
+              printf '%s\n\n' "**$kind**"
+              printf '%s\n\n' "$reason"
+              printf '| Field | Value |\n'
+              printf '|-------|-------|\n'
+              printf '| **Commit** | [\`%s\`](https://github.com/%s/commit/%s) |\n' "$sha" "$REPO" "$sha"
+              printf '| **Attributed to** | %s (%s) |\n' "$who_display" "$src"
+              printf '| **Sweep run** | [%s](https://github.com/%s/actions/runs/%s) |\n' "$RUN_ID" "$REPO" "$RUN_ID"
+              printf '| **Time (UTC)** | `%s` |\n\n' "$now"
+              printf '**Action required:** Review whether this bypass was intentional. If so, document the rationale in a comment and close. If not, investigate how branch protection was circumvented.\n'
+            } > "$body_file"
+
+            # FAIL-CLOSED: a detection that cannot be filed must not leave the run
+            # green. Record the failure; the step exits non-zero at the end.
+            filed=0
+            if [[ "$label_ok" == "1" ]]; then
+              if gh issue create --repo "$REPO" --title "$title" --body-file "$body_file" --label "admin-bypass"; then
+                filed=1
+              else
+                echo "::warning::labeled issue create failed for $sha — retrying without label"
+                if gh issue create --repo "$REPO" --title "$title" --body-file "$body_file"; then filed=1; fi
+              fi
+            else
+              echo "::warning::admin-bypass label unavailable — creating issue without label"
+              if gh issue create --repo "$REPO" --title "$title" --body-file "$body_file"; then filed=1; fi
+            fi
+            rm -f "$body_file"
+
+            if [[ "$filed" != "1" ]]; then
+              echo "::error::failed to file audit issue for $sha — run will fail"
+              AUDIT_FAILED=1
+            fi
+          }
+
+          if [[ "${#ROWS[@]}" -gt 0 ]]; then
+            echo "Auditing ${#ROWS[@]} commit(s) added to main since $BASE"
+            for row in "${ROWS[@]}"; do
+              sha="${row%%$'\t'*}"
+              author="${row#*$'\t'}"
+              [[ "$author" == "$row" ]] && author=""   # no tab => no author field
+              [[ -z "$sha" ]] && continue
+              audit_one "$sha" "$author"
+            done
+          else
+            echo "No new commits on main since $BASE — nothing to audit."
+          fi
+
+          # Advance the watermark to the audited HEAD (persisted by the post-job
+          # cache save). Only after a clean sweep — on a fail-closed exit below the
+          # file is NOT rewritten, so the next run re-audits the range.
+          if [[ "$AUDIT_FAILED" == "1" ]]; then
+            echo "::error::one or more detected bypasses could not be filed as issues"
+            exit 1
+          fi
+          printf '%s\n' "$HEAD_SHA" > "$WATERMARK_FILE"
+          echo "watermark advanced to $HEAD_SHA"

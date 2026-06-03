@@ -88,6 +88,7 @@ Version numbers are managed across three manifests (declared in `.version-bump.j
 | `scorecard.yml` | weekly cron | OpenSSF Scorecard |
 | `pinact.yml` | push to main (workflow changes) | Auto-pin actions to SHA |
 | `dependabot-auto-merge.yml` | Dependabot PRs | Approve + auto-merge safe patch/minor bumps (opt-in via `vars.DEPENDABOT_AUTO_APPROVE`) |
+| `bypass-audit.yml` | daily cron + manual | Detect commits that reached `main` without a merged PR (admin-bypass audit); opens labeled `admin-bypass` issues |
 
 ## Conventions
 
