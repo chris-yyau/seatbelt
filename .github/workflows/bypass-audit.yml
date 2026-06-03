@@ -176,6 +176,16 @@ jobs:
           # other author, or with a coincidental title, must never suppress a real
           # audit. FAIL-CLOSED: if the list call errors we cannot dedup, so abort
           # before filing (avoids duplicate issues) rather than advancing blind.
+          # NOTE: do NOT filter by --label admin-bypass here. The filing paths
+          # below fall back to creating UNLABELED issues when label creation or a
+          # labeled create fails; a label-filtered dedup would never see those and
+          # would re-file the same commit every sweep. --limit 300 fetches the 300
+          # most-recently-updated issues across ALL authors before the jq author
+          # filter selects this bot's audit issues, so the effective dedup window
+          # is "bot audit issues among the 300 newest issues repo-wide". This
+          # repo's low issue volume keeps the audit history well inside that
+          # window; if it ever accumulates >300 newer non-audit issues, raise the
+          # limit.
           if ! EXISTING_TITLES=$(gh issue list --repo "$REPO" --state all --limit 300 \
               --json title,author \
               --jq '.[] | select(.author.login == "github-actions[bot]") | .title' 2>/dev/null); then
@@ -193,7 +203,9 @@ jobs:
 
           # audit_one <sha> <commit-author-login>
           audit_one() {
-            sha="$1"; author="$2"
+            local sha="$1" author="$2"
+            local pusher who src prs api_ok attempt merge_filter pr_count pr_num
+            local reason kind short legacy_short who_display now body_file title filed label_ok
 
             # Automation suppression uses ONLY the non-forgeable PushEvent pusher.
             # If the event has aged out of the feed, do NOT skip on forgeable
@@ -243,12 +255,35 @@ jobs:
               kind="Audit Verification Failed"
             fi
 
-            short=$(printf '%s' "$sha" | cut -c1-7)
+            short=$(printf '%s' "$sha" | cut -c1-12)
+
+            # Non-mentionable attribution: a bare "@<handle>" in the rendered
+            # issue body pings the real GitHub user of that name. Only the
+            # server-recorded PushEvent pusher (src=push-event) is a verified,
+            # non-forgeable identity safe to @mention. The commit-author login is
+            # best-effort and forgeable (craft a matching author email), so the
+            # unverified-author fallback renders as plain, non-mentionable text;
+            # an absent author uses a literal placeholder. None of the three can
+            # ping an uninvolved account.
+            if [[ "$src" == "push-event" && -n "$who" ]]; then
+              who_display="@$who"
+            elif [[ -n "$who" ]]; then
+              who_display="$who"
+            else
+              who_display="(unattributed)"
+            fi
 
             # Dedup: skip only if one of the bot's own audit issues already names
             # this commit, matched on exact title delimiters so a coincidental
-            # substring (or non-bot-authored issue) cannot suppress it.
-            if printf '%s\n' "$EXISTING_TITLES" | grep -qF ": $short by @"; then
+            # substring (or non-bot-authored issue) cannot suppress it. The
+            # delimiter is "by " (not "by @") so unattributed titles dedup too.
+            # Also check the legacy 7-char prefix so a title written by an earlier
+            # version of this workflow (keyed on 7 chars) still dedups. This is
+            # inert against current 12-char titles — ": <7-char> by " can never
+            # match "<12-char> by " — so it adds no collision risk.
+            legacy_short=$(printf '%s' "$sha" | cut -c1-7)
+            if printf '%s\n' "$EXISTING_TITLES" | grep -qF ": $short by " \
+               || printf '%s\n' "$EXISTING_TITLES" | grep -qF ": $legacy_short by "; then
               echo "skip $sha — audit issue already exists"; return 0
             fi
 
@@ -265,7 +300,7 @@ jobs:
             fi
 
             body_file=$(mktemp)
-            title="$kind: $short by @${who:-unknown}"
+            title="$kind: $short by $who_display"
             now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             {
               printf '%s\n\n' "**$kind**"
@@ -273,7 +308,7 @@ jobs:
               printf '| Field | Value |\n'
               printf '|-------|-------|\n'
               printf '| **Commit** | [\`%s\`](https://github.com/%s/commit/%s) |\n' "$sha" "$REPO" "$sha"
-              printf '| **Attributed to** | @%s (%s) |\n' "${who:-unknown}" "$src"
+              printf '| **Attributed to** | %s (%s) |\n' "$who_display" "$src"
               printf '| **Sweep run** | [%s](https://github.com/%s/actions/runs/%s) |\n' "$RUN_ID" "$REPO" "$RUN_ID"
               printf '| **Time (UTC)** | `%s` |\n\n' "$now"
               printf '**Action required:** Review whether this bypass was intentional. If so, document the rationale in a comment and close. If not, investigate how branch protection was circumvented.\n'
