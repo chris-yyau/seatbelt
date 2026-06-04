@@ -47,8 +47,7 @@ seatbelt/
 ├── scripts/
 │   └── doctor.sh          # Health check and diagnostics
 ├── commands/              # Claude Code slash commands
-│   ├── setup.md           # /seatbelt:setup
-│   ├── doctor.md          # /seatbelt:doctor
+│   ├── setup.md           # /seatbelt:setup (also the health check, via --check)
 │   └── scan.md            # /seatbelt:scan
 ├── tests/                 # Test suite (bash-based)
 │   ├── run-tests.sh       # Test runner

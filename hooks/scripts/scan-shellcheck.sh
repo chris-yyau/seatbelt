@@ -39,7 +39,7 @@ source "$LIB_DIR/config.sh"
 
 # ── shellcheck availability ─────────────────────────────────────────
 if ! command -v shellcheck &>/dev/null; then
-    echo "SEATBELT DEGRADED: shellcheck not installed — shell script linting DISABLED (brew install shellcheck | /seatbelt:doctor)" >&2
+    echo "SEATBELT DEGRADED: shellcheck not installed — shell script linting DISABLED (brew install shellcheck | /seatbelt:setup)" >&2
     exit 0
 fi
 

@@ -38,7 +38,7 @@ source "$LIB_DIR/block-emit.sh"
 
 # ── gitleaks availability ───────────────────────────────────────────
 if ! command -v gitleaks &>/dev/null; then
-    echo "SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)" >&2
+    echo "SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:setup)" >&2
     exit 0
 fi
 

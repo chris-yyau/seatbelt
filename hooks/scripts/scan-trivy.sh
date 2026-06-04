@@ -45,7 +45,7 @@ fi
 
 # ── trivy availability ──────────────────────────────────────────────
 if ! command -v trivy &>/dev/null; then
-    echo "SEATBELT DEGRADED: trivy not installed — dependency CVE scanning DISABLED (brew install trivy | /seatbelt:doctor)" >&2
+    echo "SEATBELT DEGRADED: trivy not installed — dependency CVE scanning DISABLED (brew install trivy | /seatbelt:setup)" >&2
     exit 0
 fi
 

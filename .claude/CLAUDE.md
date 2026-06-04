@@ -17,9 +17,8 @@ hooks/
       result-dir.sh       # Shared: repo-specific tmp dir for scanner results
       skip-audit.sh       # Shared: logs SKIP_* bypass events to .claude/bypass-log.jsonl
 commands/
-  doctor.md               # /seatbelt:doctor command
   scan.md                 # /seatbelt:scan command
-  setup.md                # /seatbelt:setup command
+  setup.md                # /seatbelt:setup command (health check + install; --check for read-only)
 scripts/
   doctor.sh               # Health check script (JSON output)
   bump-version.sh         # Version sync across manifests

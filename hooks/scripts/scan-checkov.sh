@@ -45,7 +45,7 @@ elif python3 -c "import checkov" &>/dev/null 2>&1; then
 fi
 
 if [ -z "$CHECKOV_CMD" ]; then
-    echo "SEATBELT DEGRADED: checkov not installed — IaC scanning DISABLED (pip3 install checkov | /seatbelt:doctor)" >&2
+    echo "SEATBELT DEGRADED: checkov not installed — IaC scanning DISABLED (pip3 install checkov | /seatbelt:setup)" >&2
     exit 0
 fi
 
