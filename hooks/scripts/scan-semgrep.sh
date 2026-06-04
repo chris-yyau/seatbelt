@@ -46,7 +46,7 @@ SEMGREP_RULESET="${SEATBELT_SEMGREP_RULESET:-p/security-audit}"
 
 # ── semgrep availability ──────────────────────────────────────────
 if ! command -v semgrep &>/dev/null; then
-    echo "SEATBELT DEGRADED: semgrep not installed — source code scanning DISABLED (brew install semgrep | /seatbelt:doctor)" >&2
+    echo "SEATBELT DEGRADED: semgrep not installed — source code scanning DISABLED (brew install semgrep | /seatbelt:setup)" >&2
     exit 0
 fi
 

@@ -1,11 +1,20 @@
 ---
 name: setup
-description: Install and verify security scanners for seatbelt
+description: Check scanner health and install/verify missing security scanners (pass --check for a read-only health report)
 ---
 
 # Seatbelt Setup
 
-Detect missing scanners, install them automatically, and verify they work.
+Detect which scanners are installed, show a health report, and — unless `--check` is passed — install anything missing and verify it works.
+
+This command absorbs the former `/seatbelt:doctor` health check. Run it with no arguments to install missing scanners; run `/seatbelt:setup --check` for a read-only report that suggests install commands without running them.
+
+## Modes
+
+Inspect `$ARGUMENTS` to choose the mode:
+
+- **Default** (`/seatbelt:setup`): report status, then install missing scanners and smoke-test them.
+- **Check / read-only** (`/seatbelt:setup --check` or `--dry-run`): report status and per-scanner install suggestions, then stop. Never installs, downloads, or modifies anything.
 
 ## Steps
 
@@ -14,40 +23,83 @@ Detect missing scanners, install them automatically, and verify they work.
 bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
 ```
 
-2. Parse the JSON output. Show a status table:
+2. Parse the JSON output and present the health report.
 
-| Scanner | Status | Version | Fail Mode |
-|---------|--------|---------|-----------|
-| gitleaks | installed/missing | version or — | BLOCK |
-| checkov | installed/missing | version or — | BLOCK |
-| trivy | installed/missing | version or — | warn |
-| zizmor | installed/missing | version or — | warn |
-| semgrep | installed/missing | version or — | warn |
-| shellcheck | installed/missing | version or — | warn |
+   Compute the health score: count a scanner as **active** only if it is installed AND (for trivy) `db_cached` is true. trivy installed with `db_cached=false` counts as **degraded**, not active. Show the score prominently: **Seatbelt Health: N/6 scanners active**.
 
-Show the health score: `Seatbelt Health: N/6 scanners active`
+   | Scanner | Status | Version | Fail Mode |
+   |---------|--------|---------|-----------|
+   | gitleaks | installed/missing | version or — | BLOCK |
+   | checkov | installed/missing | version or — | BLOCK |
+   | trivy | installed/missing/degraded (no DB) | version or — | warn |
+   | zizmor | installed/missing | version or — | warn |
+   | semgrep | installed/missing | version or — | warn |
+   | shellcheck | installed/missing | version or — | warn |
 
-3. If all 6 scanners are installed:
-   - If trivy is installed but `db_cached` is false, run `trivy image --download-db-only` to download the vulnerability database automatically.
+   For trivy: if it is installed but `db_cached` is false in the JSON output, show status as **"degraded (no DB)"** rather than installed. This is a distinct condition — the binary is present but trivy cannot scan dependencies without its vulnerability database.
+
+   Also show advisory checks (not part of the health score):
+   - **commitlint**: enabled (built-in)
+   - **signing**: gpgsign configured / not configured
+
+3. If all 6 scanners are installed and trivy has a DB:
    - Show "All 6 scanners active — seatbelt is fully operational."
-   - Exit.
+   - Exit. (No further action in any mode.)
 
-4. If scanners are missing, collect the `install_cmd` for each missing tool from the doctor output. Group commands by package manager into batches. For example:
-   - If gitleaks and trivy are both missing and both use brew: `brew install gitleaks trivy`
-   - If checkov and semgrep both use brew: `brew install checkov semgrep`
+4. Handle trivy's database when all binaries are present but `db_cached` is false:
+   - **Default mode:** run `trivy image --download-db-only` to download the vulnerability database automatically, then re-check.
+   - **--check mode:** suggest it instead — "Run `trivy image --download-db-only` to download the vulnerability database and activate trivy dependency scanning." Do not run it.
 
-5. Show what will be installed, then execute immediately (no confirmation needed — the user already opted in by running `/seatbelt:setup`). Example:
+5. For every missing tool, surface the platform-aware install commands. Use the detected `platform` and `package_managers` array from the JSON output — only suggest installers available on the user's machine. Each scanner, with what it protects:
+
+   **gitleaks** — secrets, API keys, and credentials in staged changes:
+   - `brew` → `brew install gitleaks`
+   - `go` → `go install github.com/gitleaks/gitleaks/v8@latest`
+   - otherwise → download binary from https://github.com/gitleaks/gitleaks/releases
+
+   **checkov** — Infrastructure-as-Code misconfigurations (Dockerfiles, Terraform, k8s):
+   - `pip3` → `pip3 install checkov`
+   - `brew` → `brew install checkov`
+
+   **trivy** — dependency CVEs (HIGH/CRITICAL) in lock files:
+   - `brew` → `brew install trivy`
+   - otherwise → follow https://aquasecurity.github.io/trivy/latest/getting-started/installation/ (note: `apt-get install trivy` requires adding Aqua's APT repository first)
+
+   **zizmor** — GitHub Actions security (injection risks, unpinned actions):
+   - `brew` → `brew install zizmor`
+   - `pip3` → `pip3 install zizmor`
+   - `cargo` → `cargo install zizmor`
+
+   **semgrep** — source-code vulnerabilities (SQL injection, XSS, command injection, path traversal):
+   - `brew` → `brew install semgrep`
+   - `pip3` → `pip3 install semgrep`
+   - otherwise → follow https://semgrep.dev/docs/getting-started/
+
+   **shellcheck** — shell script bugs, pitfalls, and style issues:
+   - `brew` → `brew install shellcheck`
+   - `apt-get` → `apt-get install shellcheck`
+   - otherwise → download binary from https://github.com/koalaman/shellcheck/releases
+
+> **If in `--check` mode: stop here.** Present the report and the suggestions above; do not install or download anything.
+
+## Install (default mode only)
+
+6. Collect the `install_cmd` for each missing tool from the doctor output. Group commands by package manager into batches. For example:
+   - gitleaks and trivy both missing and both use brew → `brew install gitleaks trivy`
+   - checkov and semgrep both use brew → `brew install checkov semgrep`
+
+7. Show what will be installed, then execute immediately (no confirmation needed — the user already opted in by running `/seatbelt:setup` without `--check`). Example:
 
    > **Installing missing scanners: checkov, zizmor**
    > ```
    > brew install checkov zizmor
    > ```
 
-6. Execute each batch command. Show output. If trivy is installed but `db_cached` is false, also run `trivy image --download-db-only`.
+8. Execute each batch command. Show output. If trivy is installed but `db_cached` is false, also run `trivy image --download-db-only`.
 
-7. Re-run doctor.sh to verify installation succeeded. Show updated status table.
+9. Re-run doctor.sh to verify installation succeeded. Show the updated status table.
 
-8. For each newly installed scanner, run a quick smoke test:
+10. For each newly installed scanner, run a quick smoke test:
    - Create a temp directory with `mktemp -d`
    - Initialize a git repo with `git init`
    - Create appropriate test files per scanner:
@@ -70,7 +122,7 @@ Show the health score: `Seatbelt Health: N/6 scanners active`
    - Report result per scanner: OK (ran successfully), FAIL (errored), or NEEDS DB (trivy without DB)
    - Clean up the temp directory
 
-9. Show final summary:
+11. Show final summary:
    > **Seatbelt Health: 6/6 scanners active**
    >
    > | Scanner | Status | Smoke Test |
@@ -84,4 +136,4 @@ Show the health score: `Seatbelt Health: N/6 scanners active`
    >
    > Setup complete. Seatbelt will scan your staged changes before every commit.
 
-10. If any install failed or smoke test failed, do NOT say setup is complete. Instead show what failed and suggest running the scanner manually to diagnose.
+12. If any install failed or smoke test failed, do NOT say setup is complete. Instead show what failed and suggest running the scanner manually to diagnose.

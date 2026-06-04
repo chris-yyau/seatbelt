@@ -24,7 +24,7 @@ Seatbelt intercepts `git commit` commands and runs eight security scanners on yo
 You don't need all eight installed. Scanners that aren't found are skipped with a warning like:
 
 ```
-SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:doctor)
+SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:setup)
 ```
 
 Install any combination you want — Seatbelt works with one scanner or all eight.
@@ -126,14 +126,16 @@ Claude Code                        Seatbelt Plugin
 
 ## How setup works
 
-`/seatbelt:setup` is a one-stop onboarding command that:
+`/seatbelt:setup` is a one-stop onboarding **and** health-check command that:
 
 1. Runs the doctor script to detect installed scanners and their versions
-2. Shows a health score (`Seatbelt Health: N/6 scanners active`)
+2. Shows a health score (`Seatbelt Health: N/6 scanners active`), flagging trivy's DB status as a distinct condition
 3. Groups missing scanners by package manager into batched install commands
-4. Asks for your confirmation before running anything
+4. Shows what it will install, then installs it — or stops here in read-only `--check` mode
 5. Re-runs the doctor after installation to confirm success
 6. Runs smoke tests on each newly installed scanner (creates a temp git repo with representative test files, runs the scanner binary directly, and reports OK / FAIL / NEEDS DB)
+
+Run `/seatbelt:setup --check` for a read-only health report (the former `/seatbelt:doctor`) that suggests install commands without running them.
 
 ## Skip / bypass
 
@@ -164,11 +166,9 @@ Suppress specific findings:
 
 ### `/seatbelt:setup`
 
-One-stop onboarding: detects missing scanners, proposes install commands grouped by package manager, asks for confirmation, installs, then runs smoke tests to verify each scanner works. Shows a final health score.
+One-stop onboarding and health check. Detects which scanners are installed, reports versions, and shows a health score (`N/6 scanners active`), flagging trivy's DB status as a distinct condition. By default it then installs anything missing (commands grouped by package manager) and runs smoke tests to verify each scanner works.
 
-### `/seatbelt:doctor`
-
-Checks which scanners are installed, reports versions, shows a health score (`N/6 scanners active`), flags trivy's DB status as a distinct condition, and provides platform-specific install instructions for anything missing. Suggests `/seatbelt:setup` when tools are missing.
+Run `/seatbelt:setup --check` for a read-only report (the former `/seatbelt:doctor`) that lists platform-specific install instructions for anything missing without running them.
 
 ### `/seatbelt:scan`
 
@@ -256,7 +256,7 @@ When all scans pass with no findings, seatbelt produces no output — your commi
 **Scanner not installed (degraded mode):**
 
 ```text
-SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt doctor)
+SEATBELT DEGRADED: gitleaks not installed — secret scanning DISABLED (brew install gitleaks | /seatbelt:setup)
 ```
 
 ## Troubleshooting
