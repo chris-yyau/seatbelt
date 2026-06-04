@@ -44,7 +44,7 @@ Then run setup inside Claude Code:
 /seatbelt:setup
 ```
 
-`/seatbelt:setup` detects what's missing, proposes install commands grouped by package manager, asks for your confirmation, then runs smoke tests to verify everything works.
+`/seatbelt:setup` detects what's missing, proposes install commands grouped by package manager, then executes them immediately and runs smoke tests to verify everything works.
 
 ### Manual Install
 

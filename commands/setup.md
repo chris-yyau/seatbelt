@@ -46,7 +46,7 @@ bash ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.sh
    - Show "All 6 scanners active — seatbelt is fully operational."
    - Exit. (No further action in any mode.)
 
-4. Handle trivy's database when all binaries are present but `db_cached` is false:
+4. Handle trivy's database when trivy is installed but `db_cached` is false:
    - **Default mode:** run `trivy image --download-db-only` to download the vulnerability database automatically, then re-check.
    - **--check mode:** suggest it instead — "Run `trivy image --download-db-only` to download the vulnerability database and activate trivy dependency scanning." Do not run it.
 
