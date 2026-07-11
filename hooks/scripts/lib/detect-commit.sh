@@ -8,10 +8,13 @@ IS_GIT_COMMIT=""
 
 [ -z "${HOOK_DATA:-}" ] && return 0
 
-# Fast pre-filter: skip if no git commit pattern in raw data
+# Fast pre-filter: skip if no plausible git…commit pattern in raw data.
+# Uses git*commit (not the literal "git commit") so option-prefixed forms
+# like `git -c x=y commit` / `git -C dir commit` still reach the parser;
+# the python below makes the precise decision.
 case "$HOOK_DATA" in
-    *\"Bash\"*git\ commit*) ;;
-    *git\ commit*\"Bash\"*) ;;
+    *\"Bash\"*git*commit*) ;;
+    *git*commit*\"Bash\"*) ;;
     *) return 0 ;;
 esac
 
@@ -20,10 +23,20 @@ if ! command -v python3 &>/dev/null; then
     return 0  # fail-open without python3
 fi
 
+# Resolve this lib's own directory so the inline python can import the
+# shared parser regardless of how the caller sourced us.
+_seatbelt_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd 2>/dev/null)" || _seatbelt_lib_dir=""
+
 # shellcheck disable=SC2034  # IS_GIT_COMMIT is consumed by the sourcing script
-IS_GIT_COMMIT=$(printf '%s' "$HOOK_DATA" | python3 -c "
-import sys, json, re, shlex
+IS_GIT_COMMIT=$(printf '%s' "$HOOK_DATA" | SEATBELT_LIB_DIR="$_seatbelt_lib_dir" python3 -I -c "
+import os, sys, json
+# python3 runs with -I (isolated): cwd is NOT on sys.path, so a repo-supplied
+# json.py / sitecustomize.py / git_commit_parse.py cannot hijack these imports.
+_lib = os.environ.get('SEATBELT_LIB_DIR', '')
+if _lib:
+    sys.path.insert(0, _lib)
 try:
+    from git_commit_parse import commit_args
     d = json.load(sys.stdin)
     tool = d.get('tool_name', d.get('toolName', ''))
     if tool != 'Bash':
@@ -31,21 +44,9 @@ try:
     inp = d.get('tool_input', d.get('toolInput', {}))
     if isinstance(inp, str):
         inp = json.loads(inp)
-    cmd = inp.get('command', '')
-    for seg in re.split(r'&&|\|\||[;\n|]', cmd):
-        seg = seg.strip()
-        if not seg:
-            continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            tokens = shlex.split(seg, posix=False)
-        # Skip leading KEY=VALUE tokens
-        while tokens and re.match(r'^\w+=', tokens[0]):
-            tokens = tokens[1:]
-        if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
-            print('yes')
-            break
+    if commit_args(inp.get('command', '')) is not None:
+        print('yes')
 except Exception:
     pass
 " 2>/dev/null || true)
+unset _seatbelt_lib_dir

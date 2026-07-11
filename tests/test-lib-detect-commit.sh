@@ -128,6 +128,48 @@ test_detect_quoted_env() {
 }
 test_detect_quoted_env
 
+# ── Detects git-global-option-prefixed commit (git -c ... commit) ──
+test_detect_global_opt() {
+    ERRORS=""
+    local result
+    result=$(run_detect "$FIXTURES_DIR/git-commit-global-opt.json")
+    if [ "$result" = "yes" ]; then
+        pass "detect-commit: identifies 'git -c ... commit'"
+    else
+        ERRORS="\n  Expected 'yes', got '$result'"
+        fail "detect-commit: identifies 'git -c ... commit'"
+    fi
+}
+test_detect_global_opt
+
+# ── Detects git -C <dir> commit ───────────────────────────────
+test_detect_dashC() {
+    ERRORS=""
+    local result
+    result=$(run_detect "$FIXTURES_DIR/git-commit-dashC.json")
+    if [ "$result" = "yes" ]; then
+        pass "detect-commit: identifies 'git -C <dir> commit'"
+    else
+        ERRORS="\n  Expected 'yes', got '$result'"
+        fail "detect-commit: identifies 'git -C <dir> commit'"
+    fi
+}
+test_detect_dashC
+
+# ── Detects 'command git commit' wrapper ──────────────────────
+test_detect_command_prefix() {
+    ERRORS=""
+    local result
+    result=$(run_detect "$FIXTURES_DIR/git-commit-command-prefix.json")
+    if [ "$result" = "yes" ]; then
+        pass "detect-commit: identifies 'command git commit'"
+    else
+        ERRORS="\n  Expected 'yes', got '$result'"
+        fail "detect-commit: identifies 'command git commit'"
+    fi
+}
+test_detect_command_prefix
+
 # ── Ignores grep containing 'git commit' ─────────────────────
 test_detect_ignores_grep() {
     ERRORS=""

@@ -41,58 +41,50 @@ fi
 # ── Extract commit message from HOOK_DATA ─────────────────────────
 # Parse the git commit command to find -m/--message argument
 # shellcheck disable=SC2086
-COMMIT_MSG=$(printf '%s' "$HOOK_DATA" | ${TIMEOUT_CMD:+$TIMEOUT_CMD} python3 -c "
-import sys, json, re, shlex
+COMMIT_MSG=$(printf '%s' "$HOOK_DATA" | SEATBELT_LIB_DIR="$LIB_DIR" ${TIMEOUT_CMD:+$TIMEOUT_CMD} python3 -I -c "
+import os, sys, json
+# python3 runs with -I (isolated): cwd is NOT on sys.path, so a repo-supplied
+# json.py / sitecustomize.py / git_commit_parse.py cannot hijack these imports.
+_lib = os.environ.get('SEATBELT_LIB_DIR', '')
+if _lib:
+    sys.path.insert(0, _lib)
 try:
+    from git_commit_parse import commit_args
     d = json.load(sys.stdin)
     inp = d.get('tool_input', d.get('toolInput', {}))
     if isinstance(inp, str):
         inp = json.loads(inp)
-    cmd = inp.get('command', '')
-    # Find the git commit segment
-    for seg in re.split(r'&&|\|\||[;\n|]', cmd):
-        seg = seg.strip()
-        if not seg:
-            continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            tokens = shlex.split(seg, posix=False)
-        # Skip env var prefixes
-        while tokens and re.match(r'^\w+=', tokens[0]):
-            tokens = tokens[1:]
-        if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
-            # Check for --fixup, --squash, -F/--file (skip validation)
-            j = 2
-            while j < len(tokens):
-                t = tokens[j]
-                if t in ('--fixup', '--squash', '--file', '-F'):
-                    sys.exit(0)
-                if t.startswith('--file=') or t.startswith('--fixup=') or t.startswith('--squash='):
-                    sys.exit(0)
-                # -F<path> (attached form): exactly -F followed by path chars
-                if len(t) > 2 and t[:2] == '-F' and not t[2:].startswith('-'):
-                    sys.exit(0)
-                j += 1
-            # Find -m or --message
+    args = commit_args(inp.get('command', ''))
+    if args is not None:
+        # --fixup, --squash, -F/--file take a message from elsewhere → skip validation
+        skip = False
+        for t in args:
+            if t in ('--fixup', '--squash', '--file', '-F'):
+                skip = True
+            elif t.startswith('--file=') or t.startswith('--fixup=') or t.startswith('--squash='):
+                skip = True
+            elif len(t) > 2 and t[:2] == '-F' and not t[2:].startswith('-'):
+                skip = True
+            if skip:
+                break
+        if not skip:
+            # Find -m or --message (last one wins, matching git behavior)
             msgs = []
-            i = 2
-            while i < len(tokens):
-                if tokens[i] in ('-m', '--message') and i + 1 < len(tokens):
-                    msgs.append(tokens[i + 1])
+            i = 0
+            while i < len(args):
+                if args[i] in ('-m', '--message') and i + 1 < len(args):
+                    msgs.append(args[i + 1])
                     i += 2
-                elif tokens[i].startswith('-m') and len(tokens[i]) > 2:
-                    msgs.append(tokens[i][2:])
+                elif args[i].startswith('-m') and len(args[i]) > 2:
+                    msgs.append(args[i][2:])
                     i += 1
-                elif tokens[i].startswith('--message='):
-                    msgs.append(tokens[i][10:])
+                elif args[i].startswith('--message='):
+                    msgs.append(args[i][10:])
                     i += 1
                 else:
                     i += 1
             if msgs:
-                # Use last -m message for validation (matches git behavior)
                 print(msgs[-1])
-            break
 except Exception:
     pass
 " 2>/dev/null || true)

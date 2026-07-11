@@ -5,9 +5,12 @@
 .claude/review-metrics.jsonl
 .claude/sessions/
 .claude/toctou-parse.log
+.claude/litmus-state.md
+.claude/*.local.jsonl
 docs/reviews/
 docs/superpowers/
 docs/plans/
 
 # CodeGraph local index (regenerable from source — never commit)
 .codegraph/
+__pycache__/
