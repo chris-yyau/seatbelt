@@ -1,6 +1,7 @@
 ---
 name: setup
 description: Check scanner health and install/verify missing security scanners (pass --check for a read-only health report)
+argument-hint: "[--check]"
 ---
 
 # Seatbelt Setup

@@ -30,12 +30,14 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # Clean unconditionally on every commit attempt, before any early exits.
 # shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
+# Clear our own stale result before any early exit, so a now-disabled
+# scanner doesn't leave a prior run's findings for the summary to count.
+rm -f "$SEATBELT_RESULT_DIR/trivy"
 
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_TRIVY_ENABLED" = "false" ] && exit 0
-rm -f "$SEATBELT_RESULT_DIR/trivy"
 # shellcheck disable=SC1091
 source "$LIB_DIR/block-emit.sh"
 # Validate severity threshold if configured

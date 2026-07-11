@@ -41,30 +41,25 @@ fi
 # ── Check if commit is already being signed ───────────────────────
 # Check 1: Is -S or --gpg-sign in the commit command?
 # shellcheck disable=SC2086
-CMD_HAS_SIGN=$(printf '%s' "$HOOK_DATA" | ${TIMEOUT_CMD:+$TIMEOUT_CMD} python3 -c "
-import sys, json, re, shlex
+CMD_HAS_SIGN=$(printf '%s' "$HOOK_DATA" | SEATBELT_LIB_DIR="$LIB_DIR" ${TIMEOUT_CMD:+$TIMEOUT_CMD} python3 -I -c "
+import os, sys, json
+# python3 runs with -I (isolated): cwd is NOT on sys.path, so a repo-supplied
+# json.py / sitecustomize.py / git_commit_parse.py cannot hijack these imports.
+_lib = os.environ.get('SEATBELT_LIB_DIR', '')
+if _lib:
+    sys.path.insert(0, _lib)
 try:
+    from git_commit_parse import commit_args
     d = json.load(sys.stdin)
     inp = d.get('tool_input', d.get('toolInput', {}))
     if isinstance(inp, str):
         inp = json.loads(inp)
-    cmd = inp.get('command', '')
-    for seg in re.split(r'&&|\|\||[;\n|]', cmd):
-        seg = seg.strip()
-        if not seg:
-            continue
-        try:
-            tokens = shlex.split(seg)
-        except ValueError:
-            tokens = shlex.split(seg, posix=False)
-        while tokens and re.match(r'^\w+=', tokens[0]):
-            tokens = tokens[1:]
-        if len(tokens) >= 2 and tokens[0] == 'git' and tokens[1] == 'commit':
-            for t in tokens[2:]:
-                if t in ('-S', '--gpg-sign') or t.startswith('--gpg-sign=') or (t.startswith('-S') and len(t) > 2 and t[2] != '-'):
-                    print('yes')
-                    break
-            break
+    args = commit_args(inp.get('command', ''))
+    if args is not None:
+        for t in args:
+            if t in ('-S', '--gpg-sign') or t.startswith('--gpg-sign=') or (t.startswith('-S') and len(t) > 2 and t[2] != '-'):
+                print('yes')
+                break
 except Exception:
     pass
 " 2>/dev/null || true)

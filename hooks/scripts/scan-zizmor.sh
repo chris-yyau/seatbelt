@@ -30,12 +30,14 @@ git rev-parse --is-inside-work-tree &>/dev/null || exit 0
 # Clean unconditionally on every commit attempt, before any early exits.
 # shellcheck disable=SC1091
 source "$LIB_DIR/result-dir.sh"
+# Clear our own stale result before any early exit, so a now-disabled
+# scanner doesn't leave a prior run's findings for the summary to count.
+rm -f "$SEATBELT_RESULT_DIR/zizmor"
 
 # ── Config file override ─────────────────────────────────────────
 # shellcheck disable=SC1091
 source "$LIB_DIR/config.sh"
 [ "$SEATBELT_ZIZMOR_ENABLED" = "false" ] && exit 0
-rm -f "$SEATBELT_RESULT_DIR/zizmor"
 # shellcheck disable=SC1091
 source "$LIB_DIR/block-emit.sh"
 # Validate severity threshold if configured
@@ -140,7 +142,10 @@ except Exception:
             mkdir -p "$SEATBELT_RESULT_DIR"
             echo "${HITS} issue(s) in $(basename "$wf")" >> "$SEATBELT_RESULT_DIR/zizmor"
 
-            # Severity gating on text fallback: match severity labels in output
+            # Severity gating on text fallback: text output lacks per-finding
+            # severity, so low/medium both conservatively block on any finding
+            # (over-block is the safe default); only 'high' narrows to error[.
+            # Reachable only when JSON parsing fails (ancient zizmor).
             if [ -n "${SEATBELT_ZIZMOR_SEVERITY:-}" ]; then
                 _sev_lower=$(printf '%s' "$SEATBELT_ZIZMOR_SEVERITY" | tr '[:upper:]' '[:lower:]')
                 _has_blocking_text=""

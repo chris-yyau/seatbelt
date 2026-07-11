@@ -4,6 +4,7 @@
 # Skip: SKIP_SEATBELT=1
 
 set -euo pipefail
+trap 'exit 0' ERR  # fail-open on script errors (PostToolUse can't block anyway)
 
 # ── Skip override (no audit log — summary is an aggregator, not a scanner) ──
 [ "${SKIP_SEATBELT:-0}" = "1" ] && exit 0
