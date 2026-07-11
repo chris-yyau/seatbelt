@@ -88,6 +88,19 @@ test_commitlint_global_opt_message() {
 }
 test_commitlint_global_opt_message
 
+# ── Extracts message from combined short flags (git commit -am "msg") ─
+test_commitlint_combined_am_flag() {
+    local tmpfixture
+    tmpfixture=$(mktemp)
+    printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git commit -am \"added some stuff\""}}' > "$tmpfixture"
+    run_hook_test "commitlint -am message" "$COMMITLINT_SCRIPT" "$tmpfixture"
+    rm -f "$tmpfixture"
+    ERRORS=""
+    assert_exit_0 && assert_stdout_empty && assert_stderr_contains "conventional commits" && \
+        pass "commitlint extracts message from combined -am flag" || fail "commitlint extracts message from combined -am flag"
+}
+test_commitlint_combined_am_flag
+
 # ── Handles --message long form ──────────────────────────────────────
 test_commitlint_long_form_message() {
     local tmpfixture

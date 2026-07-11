@@ -81,6 +81,25 @@ try:
                 elif args[i].startswith('--message='):
                     msgs.append(args[i][10:])
                     i += 1
+                elif len(args[i]) > 2 and args[i][0] == '-' and args[i][1] != '-':
+                    # short-flag bundle (e.g. -am): 'm' is the message flag only
+                    # if every preceding char is a no-arg toggle. An arg-taking
+                    # option (F/C/c/t/S/u) consumes the rest of the bundle, so a
+                    # trailing 'm' there (e.g. -CHEADm) is part of that argument.
+                    _b = args[i][1:]
+                    _k = 0
+                    while _k < len(_b):
+                        if _b[_k] == 'm':
+                            _rest = _b[_k + 1:]
+                            if _rest:
+                                msgs.append(_rest)
+                            elif i + 1 < len(args):
+                                msgs.append(args[i + 1]); i += 1
+                            break
+                        if _b[_k] in ('F', 'C', 'c', 't', 'S', 'u'):
+                            break
+                        _k += 1
+                    i += 1
                 else:
                     i += 1
             if msgs:

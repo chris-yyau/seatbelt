@@ -45,7 +45,7 @@ def _split_segments(cmd):
             nxt = cmd[i + 1] if i + 1 < n else ""
             # redirection operators (>&, <&, 2>&1, &>, &>>, >|) embed & or |
             # but are not command separators
-            if ch == "&" and (prev in "<>" or nxt == ">"):
+            if ch == "&" and (prev in ("<", ">") or nxt == ">"):
                 buf.append(ch); i += 1; continue
             if ch == "|" and prev == ">":
                 buf.append(ch); i += 1; continue
@@ -124,6 +124,7 @@ if __name__ == "__main__":
     assert C("git commit -m x &> log") == ["-m", "x", "&>", "log"]
     assert C("git commit -m x >| out") == ["-m", "x", ">|", "out"]
     # NON-commits that must be IGNORED
+    assert C("& git commit") == []              # leading & is a separator, not redirection
     assert C("git push") is None
     assert C("grep 'git commit' file") is None
     assert C("git status") is None

@@ -20,6 +20,7 @@ If exit code is 0 (no staged changes), tell the user: "No files are staged. Stag
 Run each scanner script, piping a synthetic git commit hook input. Each scanner clears only its own result file, so the scanner order does not affect correctness — but run `scan-summary.sh` **last**, since it aggregates the per-scanner results and then removes the shared result directory. Keeping the order aligned with `hooks.json` also keeps this command's output consistent with commit-time behavior.
 
 Define the synthetic input once (it simulates a git commit command), then reuse it for every scanner:
+
 ```bash
 INPUT='{"tool_name":"Bash","tool_input":{"command":"git commit -m \"chore: seatbelt scan\""}}'
 echo "$INPUT" | bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-gitleaks.sh"
@@ -33,6 +34,7 @@ echo "$INPUT" | bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-signing.sh"
 ```
 
 Then run the summary aggregator last:
+
 ```bash
 echo "$INPUT" | bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan-summary.sh"
 ```
